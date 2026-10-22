@@ -1,0 +1,26 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary data
+*.log
+.cache/
+model_cache/
+data/raw/
+data/tmp/

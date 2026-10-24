@@ -1,4 +1,3 @@
-
 """
 Shared exception types for the WikiRAG application.
 

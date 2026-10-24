@@ -53,6 +53,7 @@ A signature shown here is a **target contract**, not proof that its implementati
 IngestOutcome = Literal["inserted", "updated", "skipped"]
 RetrievalMode = Literal["semantic", "hybrid"]
 
+
 @dataclass(frozen=True, slots=True)
 class ArticleRecord:
     article_id: int
@@ -68,12 +69,14 @@ class ArticleRecord:
     categories: tuple[str, ...] = ()
     linked_titles: tuple[str, ...] = ()
 
+
 @dataclass(frozen=True, slots=True)
 class ChunkRecord:
     chunk_index: int
     text: str
     embedding: tuple[float, ...]
     section_title: str | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class StoredChunk:
@@ -102,6 +105,7 @@ class SearchFilters:
     max_distance: float | None = None
 
     def is_empty(self) -> bool: ...
+
 
 @dataclass(frozen=True, slots=True)
 class SearchHit:
@@ -139,6 +143,7 @@ class IngestReport:
     skipped: int
     failed: tuple[tuple[str, str], ...]
 
+
 @dataclass(frozen=True, slots=True)
 class RetrievalResult:
     query: str
@@ -150,11 +155,13 @@ class RetrievalResult:
     search_ms: float
     latency_ms: float
 
+
 @dataclass(frozen=True, slots=True)
 class ContextBundle:
     text: str
     sources: tuple[SearchHit, ...]
     truncated: bool
+
 
 @dataclass(frozen=True, slots=True)
 class RAGAnswer:
@@ -165,6 +172,7 @@ class RAGAnswer:
     generator_name: str
     latency_ms: float
 
+
 @dataclass(frozen=True, slots=True)
 class EvalQuery:
     query_id: str
@@ -172,6 +180,7 @@ class EvalQuery:
     relevant_article_ids: frozenset[int]
     filters: SearchFilters | None = None
     notes: str = ""
+
 
 @dataclass(frozen=True, slots=True)
 class ModeMetrics:
@@ -181,6 +190,7 @@ class ModeMetrics:
     mrr: float
     latency_ms_p50: float
     latency_ms_p95: float
+
 
 @dataclass(frozen=True, slots=True)
 class EvalReport:
@@ -352,12 +362,14 @@ def ingest_snapshot(
 ```python
 def load_seed_titles(path: Path) -> list[tuple[str, str]]: ...
 
+
 def build_snapshot(
     seed_path: Path,
     out_path: Path,
     *,
     delay_s: float = 0.2,
 ) -> int: ...
+
 
 def load_snapshot(path: Path) -> Iterator[RawArticle]: ...
 ```
@@ -460,17 +472,14 @@ On zero retrieval hits, return a fixed no-information answer **without calling t
 **Metrics:** `src/wikirag/evaluation/metrics.py`
 
 ```python
-def recall_at_k(
-    retrieved: Sequence[int], relevant: Collection[int], k: int
-) -> float: ...
+def recall_at_k(retrieved: Sequence[int], relevant: Collection[int], k: int) -> float: ...
 
-def precision_at_k(
-    retrieved: Sequence[int], relevant: Collection[int], k: int
-) -> float: ...
 
-def reciprocal_rank(
-    retrieved: Sequence[int], relevant: Collection[int]
-) -> float: ...
+def precision_at_k(retrieved: Sequence[int], relevant: Collection[int], k: int) -> float: ...
+
+
+def reciprocal_rank(retrieved: Sequence[int], relevant: Collection[int]) -> float: ...
+
 
 def mean(values: Sequence[float]) -> float: ...
 ```
@@ -504,9 +513,7 @@ def run_rag_smoke_check(
 ) -> list[RAGAnswer]: ...
 
 
-def write_report(
-    report: EvalReport, json_path: Path, md_path: Path
-) -> None: ...
+def write_report(report: EvalReport, json_path: Path, md_path: Path) -> None: ...
 ```
 
 Relevance is assessed at the **article** level, not the chunk level. Deduplicate ranked chunk hits to unique article IDs before metric calculations. Precision@K divides by K. Invalid K or empty relevant sets raise `ValidationError`. Evaluate hybrid only for questions with filters; compare semantic on the same subset. Warm up before repeated latency measurement and report p50/p95.

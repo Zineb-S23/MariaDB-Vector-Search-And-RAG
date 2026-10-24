@@ -1,4 +1,3 @@
-
 """
 Shared data models for the MariaDB WikiRAG project.
 

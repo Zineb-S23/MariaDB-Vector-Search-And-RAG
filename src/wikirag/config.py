@@ -1,4 +1,3 @@
-
 """
 Centralized configuration for the MariaDB WikiRAG application.
 
@@ -114,9 +113,7 @@ def _required_env(name: str) -> str:
 
     # Reject missing and blank values before attempting database access.
     if value is None or not value.strip():
-        raise ValidationError(
-            f"Missing or empty required environment variable: {name}"
-        )
+        raise ValidationError(f"Missing or empty required environment variable: {name}")
 
     return value.strip()
 
@@ -163,15 +160,11 @@ def _read_port() -> int:
         port = int(raw_port)
 
     except ValueError as exc:
-        raise ValidationError(
-            "DB_PORT must be a valid integer"
-        ) from exc
+        raise ValidationError("DB_PORT must be a valid integer") from exc
 
     # TCP port numbers must fall within this valid range.
     if not 1 <= port <= 65535:
-        raise ValidationError(
-            "DB_PORT must be between 1 and 65535"
-        )
+        raise ValidationError("DB_PORT must be between 1 and 65535")
 
     return port
 
@@ -222,14 +215,8 @@ def load_settings() -> Settings:
     # Test operations must never target the main application database.
     db_name_test = os.getenv("DB_NAME_TEST", "wikirag_test").strip()
 
-    if (
-        not db_name_test.endswith("_test")
-        or db_name_test == db.database
-    ):
-        raise ValidationError(
-            "DB_NAME_TEST must end with '_test' "
-            "and differ from DB_NAME"
-        )
+    if not db_name_test.endswith("_test") or db_name_test == db.database:
+        raise ValidationError("DB_NAME_TEST must end with '_test' and differ from DB_NAME")
 
     # Both ingestion and retrieval must use the same embedding model.
     embedding_model = os.getenv(
@@ -238,9 +225,7 @@ def load_settings() -> Settings:
     ).strip()
 
     if not embedding_model:
-        raise ValidationError(
-            "EMBEDDING_MODEL cannot be empty"
-        )
+        raise ValidationError("EMBEDDING_MODEL cannot be empty")
 
     # Default to INFO rather than enabling verbose debugging automatically.
     log_level = os.getenv("LOG_LEVEL", "INFO").strip().upper()
@@ -254,21 +239,20 @@ def load_settings() -> Settings:
     }
 
     if log_level not in valid_log_levels:
-        raise ValidationError(
-            "LOG_LEVEL must be one of: DEBUG, INFO, "
-            "WARNING, ERROR, CRITICAL"
-        )
+        raise ValidationError("LOG_LEVEL must be one of: DEBUG, INFO, WARNING, ERROR, CRITICAL")
 
     # The default generator works offline without an external LLM service.
-    llm_provider = os.getenv(
-        "LLM_PROVIDER",
-        "none",
-    ).strip().lower()
+    llm_provider = (
+        os.getenv(
+            "LLM_PROVIDER",
+            "none",
+        )
+        .strip()
+        .lower()
+    )
 
     if not llm_provider:
-        raise ValidationError(
-            "LLM_PROVIDER cannot be empty"
-        )
+        raise ValidationError("LLM_PROVIDER cannot be empty")
 
     # Return one consistent configuration object for the entire project.
     return Settings(

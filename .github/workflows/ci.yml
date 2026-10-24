@@ -1,0 +1,54 @@
+
+# Automatically check the WikiRAG foundation on pull requests.
+name: Python CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# CI only needs permission to read repository contents.
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests and code quality
+    runs-on: ubuntu-latest
+
+    steps:
+      # Download the repository code.
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Install the same Python package manager used by contributors.
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+
+      # Use the Python version verified by our foundation tests.
+      - name: Install Python
+        run: uv python install 3.14
+
+      # Install development dependencies using our committed lock file.
+      # The real embedding model is not needed for these unit tests.
+      - name: Install project
+        run: uv sync --python 3.14 --extra dev --locked
+
+      # Check that the lock file matches pyproject.toml.
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      # Check Python lint rules.
+      - name: Run Ruff lint
+        run: uv run --no-sync ruff check .
+
+      # Check Python and documentation code formatting.
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check .
+
+      # Run tests without requiring MariaDB or external services.
+      - name: Run unit tests
+        run: uv run --no-sync python -m pytest -m unit -q

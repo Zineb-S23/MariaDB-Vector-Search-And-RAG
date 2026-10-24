@@ -1,0 +1,33 @@
+
+# Runs MariaDB 11.8 locally for development and testing.
+
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+
+    # Only expose MariaDB on this computer.
+    ports:
+      - "127.0.0.1:${DB_PORT:-13307}:3306"
+
+    # Values are loaded from the local .env file.
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Root password is required}
+      MARIADB_DATABASE: ${DB_NAME:?Database name is required}
+      MARIADB_USER: ${DB_USER:?Database user is required}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Database password is required}
+
+    # Preserve database data when the container restarts.
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+    # Verify MariaDB is ready to accept connections.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  mariadb_data:

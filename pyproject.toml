@@ -1,0 +1,65 @@
+
+# Defines how Python builds and installs our project.
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+# Basic information about our application.
+[project]
+name = "mariadb-wikirag"
+version = "0.1.0"
+description = "Wikipedia vector search and RAG using native MariaDB vectors and SQL"
+readme = "README.md"
+requires-python = ">=3.11"
+
+# Libraries required by the core application.
+dependencies = [
+    "PyMySQL>=1.1,<2",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.31,<3",
+    "numpy>=1.26,<3",
+]
+
+# Additional libraries for specific development tasks.
+[project.optional-dependencies]
+embeddings = [
+    "sentence-transformers>=3,<6",
+    "torch>=2.11,<3",
+]
+
+dev = [
+    "pytest>=8,<10",
+    "ruff>=0.9,<1",
+]
+
+# Our Python package lives inside src/wikirag.
+[tool.hatch.build.targets.wheel]
+packages = ["src/wikirag"]
+
+# Tell pytest where to discover tests and shared test helpers.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
+# Declare the test categories used throughout the project.
+markers = [
+    "unit: fast tests that do not require MariaDB or external services",
+    "integration: tests that interact with a real MariaDB database",
+    "e2e: tests that verify the complete application workflow",
+]
+
+# Shared linting configuration.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+# Always obtain PyTorch from the CPU-only package index.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+# Only packages explicitly assigned to this index use it.
+# All other dependencies continue to come from PyPI.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

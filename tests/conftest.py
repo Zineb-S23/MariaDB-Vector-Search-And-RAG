@@ -8,6 +8,7 @@ Database-specific integration fixtures will be introduced separately.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fakes import FakeEmbedder, InMemoryRepository
@@ -46,3 +47,36 @@ def fake_repo() -> Iterator[InMemoryRepository]:
     finally:
         # Close the repository even when a test fails.
         repo.close()
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Automatically categorize tests based on their directory.
+
+    Pytest calls this hook after discovering tests.
+
+    Args:
+        items (list[pytest.Item]): Tests collected by pytest.
+
+    Returns:
+        None: Adds a category marker to each matching test.
+    """
+    tests_root = Path(__file__).resolve().parent
+
+    categories = {
+        "unit": pytest.mark.unit,
+        "integration": pytest.mark.integration,
+        "e2e": pytest.mark.e2e,
+    }
+
+    for item in items:
+        try:
+            relative_path = item.path.relative_to(tests_root)
+        except ValueError:
+            # Ignore tests that are outside our project's tests directory.
+            continue
+
+        if relative_path.parts:
+            category = relative_path.parts[0]
+
+            if category in categories:
+                item.add_marker(categories[category])

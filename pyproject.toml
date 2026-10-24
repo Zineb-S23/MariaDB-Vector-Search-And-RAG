@@ -35,9 +35,17 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/wikirag"]
 
-# Tell pytest where to look for tests.
+# Tell pytest where to discover tests and shared test helpers.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
+
+# Declare the test categories used throughout the project.
+markers = [
+    "unit: fast tests that do not require MariaDB or external services",
+    "integration: tests that interact with a real MariaDB database",
+    "e2e: tests that verify the complete application workflow",
+]
 
 # Shared linting configuration.
 [tool.ruff]

@@ -616,3 +616,149 @@ def test_list_topics_and_categories(
 
         with pytest.raises(ValidationError):
             repo.list_categories(min_articles=0)
+
+
+def _linked_target_article() -> ArticleRecord:
+    """Create a target article referenced by our existing test article.
+
+    Returns:
+        ArticleRecord: Another article in the test corpus.
+    """
+    return replace(
+        _example_article(),
+        article_id=990002,
+        title="Relativity",
+        url="https://en.wikipedia.org/wiki/Relativity",
+        fingerprint="b" * 64,
+        linked_titles=(),
+    )
+
+
+def test_resolve_links_matches_stored_articles(
+    test_db_config: DbConfig,
+) -> None:
+    """Resolve known targets while leaving unknown titles unresolved.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = _example_article()
+    target = _linked_target_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(target, _example_chunks())
+
+        assert repo.resolve_links() == 1
+        assert repo.resolve_links() == 1
+
+        linked = repo.get_linked_articles(source.article_id)
+
+        assert [article.article_id for article in linked] == [target.article_id]
+        assert repo.get_linked_articles(target.article_id) == []
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT target_title, target_article_id "
+            "FROM links WHERE source_article_id = %s "
+            "ORDER BY target_title",
+            (source.article_id,),
+        )
+        rows = cursor.fetchall()
+
+    assert len(rows) == 2
+    assert rows[0]["target_title"] == "Quantum mechanics"
+    assert rows[0]["target_article_id"] is None
+    assert rows[1]["target_title"] == "Relativity"
+    assert rows[1]["target_article_id"] == target.article_id
+
+
+def test_links_resolve_after_later_ingestion(
+    test_db_config: DbConfig,
+) -> None:
+    """Resolve links after their target articles are ingested.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = _example_article()
+    target = _linked_target_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+
+        assert repo.resolve_links() == 0
+        assert repo.get_linked_articles(source.article_id) == []
+
+        repo.ingest_article(target, _example_chunks())
+
+        assert repo.resolve_links() == 1
+        assert len(repo.get_linked_articles(source.article_id)) == 1
+
+
+def test_delete_article_cascades_and_unresolves_incoming_links(
+    test_db_config: DbConfig,
+) -> None:
+    """Delete dependent records and clear incoming target references.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = _example_article()
+    target = _linked_target_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(target, _example_chunks())
+        repo.resolve_links()
+
+        assert repo.count_articles() == 2
+        assert repo.count_chunks() == 4
+
+        assert repo.delete_article(target.article_id) is True
+
+        assert repo.count_articles() == 1
+        assert repo.count_chunks() == 2
+        assert repo.get_article(target.article_id) is None
+        assert repo.get_linked_articles(source.article_id) == []
+
+        # Deleting an already absent article returns False.
+        assert repo.delete_article(target.article_id) is False
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT target_article_id FROM links "
+            "WHERE source_article_id = %s AND target_title = %s",
+            (source.article_id, "Relativity"),
+        )
+        row = cursor.fetchone()
+
+    assert row is not None
+    assert row["target_article_id"] is None
+
+
+def test_delete_source_removes_outgoing_links(
+    test_db_config: DbConfig,
+) -> None:
+    """Delete an article and its outgoing links and chunks.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+
+        assert repo.delete_article(source.article_id) is True
+        assert repo.count_articles() == 0
+        assert repo.count_chunks() == 0
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM links WHERE source_article_id = %s",
+            (source.article_id,),
+        )
+        row = cursor.fetchone()
+
+    assert row["total"] == 0

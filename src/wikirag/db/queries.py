@@ -167,3 +167,35 @@ GROUP BY c.category_id, c.name
 HAVING COUNT(DISTINCT ac.article_id) >= %s
 ORDER BY c.name
 """
+
+
+# Match outgoing Wikipedia link titles with stored articles.
+RESOLVE_LINK_TARGETS = """
+UPDATE links AS l
+LEFT JOIN articles AS a
+    ON LOWER(l.target_title) = LOWER(a.title)
+SET l.target_article_id = a.article_id
+"""
+
+COUNT_RESOLVED_LINKS = """
+SELECT COUNT(*) AS total
+FROM links
+WHERE target_article_id IS NOT NULL
+"""
+
+GET_LINKED_ARTICLES = """
+SELECT DISTINCT
+    a.article_id, a.title, a.url, a.revision_id,
+    a.revised_at, a.length_chars, a.fingerprint,
+    a.topic, a.language, a.fetched_at
+FROM links AS l
+JOIN articles AS a
+    ON a.article_id = l.target_article_id
+WHERE l.source_article_id = %s
+ORDER BY a.article_id
+"""
+
+DELETE_ARTICLE_BY_ID = """
+DELETE FROM articles
+WHERE article_id = %s
+"""

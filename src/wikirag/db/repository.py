@@ -17,6 +17,8 @@ from wikirag.db.connection import get_connection, transaction
 from wikirag.db.queries import (
     COUNT_ARTICLES,
     COUNT_CHUNKS,
+    COUNT_RESOLVED_LINKS,
+    DELETE_ARTICLE_BY_ID,
     DELETE_ARTICLE_CATEGORIES,
     DELETE_ARTICLE_CHUNKS,
     DELETE_OUTGOING_LINKS,
@@ -30,6 +32,7 @@ from wikirag.db.queries import (
     GET_EMBEDDING_META,
     GET_FINGERPRINT,
     GET_FINGERPRINT_FOR_UPDATE,
+    GET_LINKED_ARTICLES,
     GET_NEIGHBOR_CHUNKS,
     INSERT_ARTICLE,
     INSERT_ARTICLE_CATEGORY,
@@ -37,6 +40,7 @@ from wikirag.db.queries import (
     INSERT_OUTGOING_LINK,
     LIST_CATEGORIES,
     LIST_TOPICS,
+    RESOLVE_LINK_TARGETS,
     UPDATE_ARTICLE,
     UPSERT_CATEGORY,
 )
@@ -704,3 +708,68 @@ class WikiRepository:
 
         rows = self._fetch_all(LIST_CATEGORIES, (min_articles,))
         return [row["name"] for row in rows]
+
+    def resolve_links(self) -> int:
+        """Resolve Wikipedia link titles to stored article identifiers.
+
+        Links to articles outside the corpus remain unresolved.
+        Running this method repeatedly is safe.
+
+        Returns:
+            int: Total number of resolved links.
+
+        Raises:
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If a database operation fails.
+        """
+        self._check_open()
+
+        with transaction(self._conn) as conn, conn.cursor() as cursor:
+            # Recalculate targets to handle changed article titles.
+            cursor.execute(RESOLVE_LINK_TARGETS)
+            cursor.execute(COUNT_RESOLVED_LINKS)
+            row = cursor.fetchone()
+
+            return int(row["total"])
+
+    def get_linked_articles(self, article_id: int) -> list[ArticleRecord]:
+        """Retrieve articles linked from a source Wikipedia article.
+
+        Only links resolved to articles in our corpus are returned.
+
+        Args:
+            article_id: Wikipedia identifier of the source article.
+
+        Returns:
+            list[ArticleRecord]: Linked articles ordered by article ID.
+
+        Raises:
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If a database query fails.
+        """
+        rows = self._fetch_all(GET_LINKED_ARTICLES, (article_id,))
+
+        return [self._article_from_row(row) for row in rows]
+
+    def delete_article(self, article_id: int) -> bool:
+        """Delete an article and its dependent database records.
+
+        The database's foreign keys remove outgoing links,
+        category associations and chunks. Incoming links retain
+        their titles but lose their resolved target ID.
+
+        Args:
+            article_id: Wikipedia identifier of the article to delete.
+
+        Returns:
+            bool: True if the article existed, otherwise False.
+
+        Raises:
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If deletion fails.
+        """
+        self._check_open()
+
+        with transaction(self._conn) as conn, conn.cursor() as cursor:
+            cursor.execute(DELETE_ARTICLE_BY_ID, (article_id,))
+            return cursor.rowcount > 0

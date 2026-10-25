@@ -658,16 +658,11 @@ class InMemoryRepository:
         if type(top_k) is not int or not 1 <= top_k <= 100:
             raise ValidationError("top_k must be between 1 and 100")
 
-        if filters is not None and not isinstance(filters, SearchFilters):
-            raise ValidationError("filters must be SearchFilters or None")
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
 
-        # Reject invalid distance thresholds before searching.
-        if (
-            filters is not None
-            and filters.max_distance is not None
-            and (not math.isfinite(filters.max_distance) or not 0.0 <= filters.max_distance <= 2.0)
-        ):
-            raise ValidationError("max_distance must be between 0 and 2")
+            filters.validate()
 
         query_vector = self._validate_vector(query_embedding)
         ranked: list[SearchHit] = []

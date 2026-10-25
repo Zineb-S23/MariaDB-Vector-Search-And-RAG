@@ -855,18 +855,11 @@ class WikiRepository:
         if type(top_k) is not int or not 1 <= top_k <= 100:
             raise ValidationError("top_k must be an integer between 1 and 100")
 
-        if filters is not None and not isinstance(filters, SearchFilters):
-            raise ValidationError("filters must be SearchFilters or None")
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
 
-        if filters is not None and filters.max_distance is not None:
-            threshold = filters.max_distance
-
-            if (
-                type(threshold) not in (int, float)
-                or not math.isfinite(threshold)
-                or not 0.0 <= threshold <= 2.0
-            ):
-                raise ValidationError("max_distance must be between 0 and 2")
+            filters.validate()
 
         vector_json = self._serialize_search_vector(query_embedding)
 
@@ -953,18 +946,11 @@ class WikiRepository:
         if type(top_k) is not int or not 1 <= top_k <= 100:
             raise ValidationError("top_k must be an integer between 1 and 100")
 
-        if filters is not None and not isinstance(filters, SearchFilters):
-            raise ValidationError("filters must be SearchFilters or None")
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
 
-        if filters is not None and filters.max_distance is not None:
-            threshold = filters.max_distance
-
-            if (
-                type(threshold) not in (int, float)
-                or not math.isfinite(threshold)
-                or not 0.0 <= threshold <= 2.0
-            ):
-                raise ValidationError("max_distance must be between 0 and 2")
+            filters.validate()
 
         vector_json = self._serialize_search_vector(query_embedding)
 

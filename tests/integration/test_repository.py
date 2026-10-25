@@ -14,7 +14,10 @@ from wikirag.config import (
     load_settings,
 )
 from wikirag.db.connection import get_connection
-from wikirag.db.queries import build_hybrid_search_query
+from wikirag.db.queries import (
+    SEARCH_CHUNKS_SEMANTIC,
+    build_hybrid_search_query,
+)
 from wikirag.db.repository import WikiRepository
 from wikirag.db.schema import init_schema
 from wikirag.errors import (
@@ -1358,3 +1361,36 @@ def test_set_ef_search_rejects_invalid_values(
         after = int(repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"])
 
         assert after == before
+
+
+def test_semantic_search_plan_selects_vector_index(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify MariaDB selects the HNSW index for semantic search.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                article,
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    query_vector = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+    vector_json = json.dumps(query_vector)
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "EXPLAIN " + SEARCH_CHUNKS_SEMANTIC,
+            (vector_json, vector_json, 2),
+        )
+        plan = cursor.fetchall()
+
+    # The inner nearest-neighbor query should select the VECTOR index.
+    assert any(row["table"] == "c" and row["key"] == "embedding" for row in plan), plan

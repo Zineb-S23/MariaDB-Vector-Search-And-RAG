@@ -172,45 +172,59 @@ A failed SQL operation rolls back the article's metadata and related rows togeth
 
 **Title matching policy:** get_article_by_title() and resolve_links() use exact, case-sensitive title matching, consistent with the database's binary title collation. The in-memory fake follows the same policy. The Wikipedia ingestion pipeline must normalize article titles and outgoing link titles consistently before storage.
 
+
 ## 5. Verified evidence (not benchmark results)
 
 The following results were reported from the developer's local WSL/Docker environment:
 
-- MariaDB 11.8 Docker container reached `healthy` status, and the SQL schema was applied; `SHOW CREATE TABLE chunks` was inspected for the native `VECTOR(384)` and cosine index.
-- Real insertion tests passed using `VEC_FromText` and verified native vector round-tripping with `VEC_ToText`.
-- Real integration tests passed for model metadata, insert/skip/update, category/link persistence, read operations, link resolution/deletion, invalid vector rejection and transactional rollback.
-- `make setup-test-db` succeeded and printed the separate `wikirag_test` database.
-- Latest reported local suite: **249 passed** (167 unit tests and
-  82 integration-marked tests); Ruff lint and formatting checks passed.
-- Exact cosine retrieval was verified against MariaDB, including
-  ranked results, hybrid filters, and invalid-input handling.
-  An EXPLAIN integration test confirmed that the exact-search query
-  does not select the embedding HNSW index.
-- Session-scoped HNSW tuning was verified for supported values,
-  invalid values, connection isolation, and unchanged global settings.
-- Real MariaDB integration tests verified topic, category, article-ID,
-  article-length, revision-date, link, and distance filters. Tests
-  also verified filtering before top-K and parity with the
-  in-memory repository.
+- The MariaDB 11.8 Docker container reached `healthy` status, and the SQL schema was applied successfully.
+- `SHOW CREATE TABLE chunks` confirmed the native `VECTOR(384)` column and cosine-distance VECTOR index.
+- Real database insertion tests passed using `VEC_FromText`, and vector round-tripping was verified using `VEC_ToText`.
+- Integration tests verified embedding metadata, atomic article ingestion, insertion/skipping/updating, category and link persistence, article retrieval, link resolution, deletion, invalid-vector rejection, and transaction rollback.
+- `make setup-test-db` successfully configured the separate `wikirag_test` database.
+- Native semantic search was tested against MariaDB using stored synthetic embeddings. Tests verified cosine-distance ranking, top-K limits, article metadata, and similarity scores.
+- Hybrid SQL filtering was tested against MariaDB for topics, categories, included and excluded article IDs, article length, revision date, outgoing links, and maximum cosine distance.
+- Hybrid-search tests verified individual filters, combined predicates, case-insensitive topic/category matching, and filtering before top-K selection.
+- Fake-versus-MariaDB parity tests verified consistent filtered-search behavior between `InMemoryRepository` and `WikiRepository`.
+- Shared `SearchFilters` validation tests verified invalid types, identifiers, thresholds, timestamps, and boundary values. Both repository implementations reject invalid filters using `ValidationError`.
+- Exact cosine retrieval was verified against MariaDB, including ranking, optional filters, invalid inputs, and exclusion of the vector index.
+- `EXPLAIN` integration tests confirmed that the semantic-search query selects the `embedding` VECTOR index and the exact-search query does not select it.
+- Session-scoped HNSW tuning was verified for accepted and rejected values, connection isolation, and unchanged global settings.
+- The latest reported local test suite passed **273 tests: 182 unit tests and 91 integration tests**.
+- Ruff lint, Ruff formatting, and Git whitespace checks passed.
 
+These are **local verification results**, not measurements of retrieval quality or performance on a real Wikipedia corpus.
 
+The tests demonstrate functional database behavior using synthetic embeddings and controlled test articles. They do not establish recall, latency, scalability, or an optimal HNSW configuration.
 
-These are **local** observations. They are not a claim that CI has run on the GitHub branch, that a real Wikipedia corpus has been ingested, or that native vector ranking and hybrid-query performance have been demonstrated. The separate GitHub Actions MariaDB job must be verified on a pushed PR.
+The results also do not imply that the GitHub Actions workflows have passed for the final pull request. CI results must be checked separately after pushing the completed branch.
 
-For reproducible database evidence, capture the real output of:
+### Reproducing database verification
+
+From the repository root:
 
 ```bash
+uv lock --check
 make version
 make setup-test-db
-make test-db
 make lint
+make test-unit
+make test-db
+git diff --check
+```
 
-# Log in interactively; enter your own local password when prompted.
+To inspect the actual MariaDB configuration:
+
+```bash
+# Enter the local MariaDB password interactively.
 docker compose exec db mariadb -u wikirag -p wikirag -e 'SHOW CREATE TABLE chunks\G'
+
 docker compose exec db mariadb -u wikirag -p wikirag -e "SHOW VARIABLES LIKE 'mhnsw%';"
 ```
 
-Do not paste private passwords or replace a missing output with an expected-looking value. The exact MariaDB patch release and live `mhnsw%` variable values must come from the running server.
+The database version, index definition, and session variables should be recorded from the running database rather than assumed from configuration files.
+
+Do not commit `.env`, passwords, or other private credentials.
 
 ## 6. MariaDB native-vector verification and planned experiments
 
@@ -230,7 +244,7 @@ The following configuration was inspected directly on 25 October 2026 using the 
 | `mhnsw_ef_search` | `20` |
 | `mhnsw_max_cache_size` | `16777216` bytes (16 MiB) |
 
-The values were verified using:
+The configuration was verified using:
 
 ```sql
 SELECT VERSION();
@@ -238,160 +252,262 @@ SHOW VARIABLES LIKE 'mhnsw%';
 SHOW CREATE TABLE chunks\G
 ```
 
-The actual `chunks` table contains:
+The `chunks` table contains:
 
 ```sql
 embedding VECTOR(384) NOT NULL
 ```
 
-Its index is reported by MariaDB as:
+MariaDB reports its vector index as:
 
 ```sql
 VECTOR KEY `embedding` (`embedding`) `M`='16' `DISTANCE`='cosine'
 ```
 
-The server defaults of `M=6` and Euclidean distance do not determine the configuration of this index because our schema explicitly specifies `M=16` and cosine distance.
+Our schema explicitly specifies `M=16` and cosine distance. Therefore, the server defaults of `M=6` and Euclidean distance do not determine the configuration of this index.
 
-The index was successfully created and verified on MariaDB 11.8.9. Integration tests also confirmed native vector insertion using `VEC_FromText` and round-trip retrieval using `VEC_ToText`.
+The index was successfully created and verified on MariaDB 11.8.9.
 
-These observations verify the schema and vector storage. They do not establish the performance or accuracy of the HNSW search index.
+Integration tests also confirmed native vector insertion using `VEC_FromText` and round-trip retrieval using `VEC_ToText`.
 
+These observations verify the schema, native vector storage, and index configuration. They do not establish the performance or accuracy of approximate HNSW retrieval.
 
-### 6.2 Initial semantic search execution-plan verification
+### 6.2 Semantic and exact search execution-plan verification
 
-During semantic-search development, three query structures were
-examined using `EXPLAIN` on MariaDB 11.8.9:
+During semantic-search development, three query structures were examined using `EXPLAIN` on MariaDB 11.8.9:
 
-1. **Minimal vector search:** MariaDB selected the native `embedding`
-   VECTOR index (`type=index`, `key=embedding`).
-2. **Vector search with an article join:** The original query used
-   a full scan of `chunks` (`type=ALL`, `key=NULL`) and filesort.
-3. **Rank-first, join-second search:** A derived-table query ranked
-   chunks before joining article metadata. The inner query selected
-   the native `embedding` VECTOR index.
+1. **Minimal vector search:** MariaDB selected the native `embedding` VECTOR index (`type=index`, `key=embedding`).
+2. **Vector search with an article join:** The original query used a full scan of `chunks` (`type=ALL`, `key=NULL`) and filesort.
+3. **Rank-first, join-second search:** A derived-table query ranked chunks before joining article metadata. The inner query selected the native `embedding` VECTOR index.
 
-The third structure was selected for the initial `search_chunks()`
-implementation because it preserves index-eligible nearest-neighbor
-ranking while retrieving article titles and URLs.
+The third structure was selected for `WikiRepository.search_chunks()` because it allows native vector-index selection while returning article titles, URLs, and chunk metadata.
 
-**Limitation:** The test database contained zero chunks during these
-EXPLAIN comparisons. The results demonstrate optimizer index
-selection, not actual HNSW performance, recall, or latency on a
-populated Wikipedia corpus.
+**Initial limitation:** The database contained zero chunks during these first `EXPLAIN` comparisons. These initial observations established optimizer plan selection but did not demonstrate behavior with stored vectors.
 
-Index usage and retrieval performance must be reevaluated using
-a representative Wikipedia corpus during the database experiments.
+**Additional execution-plan verification**
+
+A subsequent MariaDB integration test inserted synthetic chunks into the test database and examined the execution plan for `SEARCH_CHUNKS_SEMANTIC`.
+
+The `EXPLAIN` result confirmed that MariaDB selected the `embedding` VECTOR index for the inner nearest-neighbor ranking query.
+
+A separate integration test examined the exact-search SQL generated by `build_hybrid_search_query()`.
+
+That query explicitly includes:
+
+```sql
+FROM chunks AS c IGNORE INDEX (embedding)
+```
+
+The corresponding `EXPLAIN` test confirmed that the exact-search query did not select the `embedding` index.
+
+Together, these tests establish two distinct query paths:
+
+- **Indexed semantic search:** The tested execution plan selects MariaDB's native vector index.
+- **Exact cosine search:** The tested execution plan avoids the vector index and calculates exact cosine-distance rankings.
+
+Both query paths use MariaDB's native `VEC_DISTANCE_COSINE` function.
+
+**Remaining limitation:** Execution-plan verification does not establish actual search latency, HNSW recall, or performance at scale.
+
+The plans and performance must be reevaluated using a representative Wikipedia corpus.
 
 ### 6.3 Experiments still required
 
 | Experiment | Current status | Planned verification |
 | --- | --- | --- |
-| Hybrid SQL filtering with HNSW | Not measured | Execute semantic search with relational predicates and inspect `EXPLAIN` plans |
-| HNSW top-K under selective filters | Not measured | Compare eligible result counts under increasing filter selectivity |
-| Exact cosine search baseline | Implemented and integration-tested | Compare against HNSW over a representative Wikipedia corpus |
-| HNSW vs. exact recall and latency | Not measured | Compare results with repeated runs on the same Wikipedia corpus |
-| Transaction consistency | Ingestion rollback tested; search visibility not measured | Demonstrate consistent vector and metadata visibility during transactions |
-| FULLTEXT compatibility | Not tested; optional | Investigate only after mandatory native vector and hybrid search are complete |
+| Indexed hybrid SQL filtering | Not implemented or benchmarked | Investigate HNSW-compatible filtered-query plans and compare with the existing exact-filtered implementation |
+| HNSW top-K under selective filters | Not measured on a representative corpus | Compare eligible result counts under increasing filter selectivity |
+| Exact cosine search baseline | Implemented and integration-tested | Compare exact results with HNSW on the same Wikipedia corpus |
+| HNSW vs. exact recall and latency | Not measured | Run repeated searches over a fixed labeled question set |
+| HNSW `ef_search` sensitivity | Session tuning implemented; retrieval effects not measured | Compare recall and latency across multiple `ef_search` settings |
+| Vector index parameter comparison | Starting configuration verified; alternatives not measured | Compare selected supported HNSW configurations under controlled conditions |
+| Transaction consistency | Ingestion rollback tested; concurrent search visibility not measured | Demonstrate consistent visibility of vector and relational metadata during transactions |
+| FULLTEXT compatibility | Not tested; optional | Investigate only after mandatory native-vector and hybrid-search requirements are satisfied |
 
-These tasks belong primarily to `feature/database-search` and subsequent database experiments.
+These experiments belong to the database-search evaluation and final integration stages.
 
-The official assignment requires semantic retrieval using `VEC_DISTANCE_COSINE`, relational SQL constraints in the same statement, and measured recall and latency over a real Wikipedia corpus.
+The official Area 4 assignment requires:
 
-No search performance, recall or latency conclusions are claimed at this stage.
+- A real Wikipedia corpus.
+- MariaDB-native semantic retrieval using `VEC_DISTANCE_COSINE`.
+- Relational SQL constraints combined with semantic retrieval in the same statement.
+- A labeled question set with known relevant source articles.
+- Measured retrieval recall and latency.
 
+The current database implementation supports the required retrieval operations, but the Wikipedia-based evaluation results have not yet been produced.
+
+No recall, latency, or performance conclusions are claimed at this stage.
 
 ### 6.4 Hybrid SQL filtering implementation
 
-Milestone 2 implements hybrid retrieval through
-`WikiRepository.search_chunks()` using MariaDB-native
-`VEC_DISTANCE_COSINE`.
+Milestone 2 implements database-native hybrid retrieval through `WikiRepository.search_chunks()`.
+
+The implementation uses MariaDB's native `VEC_DISTANCE_COSINE` function alongside ordinary SQL predicates and relational joins.
 
 Two query paths are supported:
 
-1. **Unfiltered semantic search:** Uses the rank-first,
-   join-second SQL query designed to allow native HNSW index
-   selection before retrieving article metadata.
-2. **Filtered hybrid search:** Uses a dynamically assembled,
-   parameterized SQL statement. Article metadata, category,
-   link, and distance constraints are evaluated together with
-   exact cosine-distance ranking. The query uses
-   `IGNORE INDEX (embedding)` to exclude the vector index
-   from this initial filtered-search implementation.
+1. **Unfiltered semantic search:** Uses the rank-first, join-second SQL query designed to allow HNSW index selection before retrieving article metadata.
+2. **Filtered hybrid search:** Uses dynamically assembled, parameterized SQL. Article metadata, category, link, and distance constraints are combined with exact cosine ranking in one SQL statement.
 
-Supported filters are:
+The filtered implementation includes:
 
-- Corpus topics
-- Wikipedia categories
-- Included article IDs
-- Excluded article IDs
-- Minimum article length (strict greater-than)
-- Earliest revision timestamp
-- Links originating from another article
-- Maximum cosine distance
+```sql
+IGNORE INDEX (embedding)
+```
 
-Conditions across filter fields use AND semantics. Multiple
-values within a topic, category, or included-ID filter use
-OR semantics. SQL values are passed through bound parameters.
+This excludes the vector index from the filtered-search query, providing exact ranking over eligible chunks and avoiding selective-filter top-K under-fill.
 
-**Verified behavior:** Local tests cover individual filters,
-combined constraints, case-insensitive topic/category matching,
-selective-filter top-K behavior, and fake-versus-MariaDB
-repository parity.
+#### Supported filters
 
-The latest reported test suite passed 237 tests:
-169 unit tests and 68 integration tests.
+| Filter | SQL behavior |
+| --- | --- |
+| `topics` | Match any specified topic, case-insensitively |
+| `categories` | Match any specified Wikipedia category using relational SQL |
+| `article_ids` | Include only specified article IDs |
+| `exclude_article_ids` | Exclude specified article IDs |
+| `min_length_chars` | Require `length_chars > min_length_chars` |
+| `edited_since` | Require `revised_at >= edited_since` |
+| `linked_from_article_id` | Restrict results to articles linked from the specified article |
+| `max_distance` | Return only chunks within the specified cosine-distance threshold |
 
-**Limitations:** Filtered searches currently use exact ranking,
-not an indexed hybrid-search optimization. Performance and HNSW
-recall have not been benchmarked on a representative Wikipedia
-corpus. Runtime validation of malformed individual filter-field
-contents is not yet exhaustive.
+Conditions across different filter fields use **AND** semantics.
 
+Multiple values within a topic, category, or included-ID field use **OR** semantics.
+
+SQL values are passed using bound parameters rather than interpolated directly into query strings. Dynamically generated SQL fragments contain trusted query structure and placeholders.
+
+#### Filter validation
+
+The shared `SearchFilters` model provides:
+
+```python
+def validate(self) -> None:
+```
+
+The method validates all eight filter fields before retrieval.
+
+Validation requirements include:
+
+- `topics` and `categories` must be tuples containing non-empty strings.
+- `article_ids` and `exclude_article_ids` must contain positive integer identifiers.
+- `min_length_chars` must be a non-negative integer.
+- `edited_since` must be a naive UTC `datetime`.
+- `linked_from_article_id` must be a positive integer.
+- `max_distance` must be a finite numeric value between 0 and 2.
+
+Invalid values raise the project's shared `ValidationError`.
+
+Both `WikiRepository` and `InMemoryRepository` call `SearchFilters.validate()` before executing searches with supplied filters.
+
+This keeps filter-validation behavior consistent across production retrieval and fake-repository tests.
+
+#### Verified behavior
+
+Local tests cover:
+
+- Every individual search-filter field.
+- Multiple relational conditions in one SQL statement.
+- Case-insensitive topic and category filtering.
+- AND semantics across fields and OR semantics within multi-value fields.
+- Article-length and cosine-distance boundaries.
+- Filtering before top-K selection.
+- Invalid filter inputs and boundary conditions.
+- Fake-versus-MariaDB repository parity.
+
+The latest reported local suite passed **273 tests: 182 unit tests and 91 integration tests**.
+
+#### Limitations
+
+Filtered searches currently use exact cosine ranking rather than indexed hybrid-search acceleration.
+
+This design prioritizes correct filtered results over approximate nearest-neighbor speed.
+
+HNSW-accelerated hybrid retrieval and its performance characteristics remain subjects for future experiments.
+
+Recall and latency have not yet been benchmarked on a representative Wikipedia corpus.
 
 ### 6.5 Exact cosine baseline and HNSW tuning
 
-Milestone 3 implements both remaining database-search methods.
+Milestone 3 implements the two remaining database-search methods defined in the shared repository interface.
 
-**Exact cosine search**
+#### Exact cosine search
 
-`WikiRepository.search_chunks_exact()` accepts the same query
-embedding, top-K limit, and optional `SearchFilters` as
-`search_chunks()`.
+`WikiRepository.search_chunks_exact()` accepts the same arguments as `search_chunks()`:
 
-The method uses MariaDB's native `VEC_DISTANCE_COSINE` function
-and explicitly excludes the `embedding` vector index using
-`IGNORE INDEX (embedding)`.
+```python
+def search_chunks_exact(
+    self,
+    query_embedding: Sequence[float],
+    *,
+    top_k: int = 5,
+    filters: SearchFilters | None = None,
+) -> list[SearchHit]:
+```
 
-The query applies relational filters before ranking eligible chunks,
-providing an exact nearest-neighbor baseline for comparing
-approximate HNSW retrieval.
+It uses MariaDB's native `VEC_DISTANCE_COSINE` function and explicitly excludes the `embedding` HNSW index through:
 
-Integration tests verify ranked results, filtering, input validation,
-and execution-plan exclusion of the HNSW index.
+```sql
+IGNORE INDEX (embedding)
+```
 
-**HNSW search breadth**
+Relational filters are applied within the SQL query before the final nearest-neighbor ranking and top-K limit.
 
-`WikiRepository.set_ef_search(value)` configures the MariaDB
-`mhnsw_ef_search` session variable.
+The method provides an exact cosine-distance baseline for evaluating approximate HNSW results.
 
-The implementation accepts integer values from 1 through 10000
-and rejects invalid values with `ValidationError`.
+Integration tests verify:
 
-The setting is changed using a parameterized `SET SESSION` query,
-so it affects the repository's current connection rather than the
-global MariaDB configuration.
+- Correct cosine-distance ranking.
+- Top-K limits.
+- Returned article and chunk metadata.
+- Support for hybrid SQL filters.
+- Rejection of invalid inputs.
+- Exclusion of the HNSW index in the `EXPLAIN` execution plan.
 
-Integration tests verify accepted values, rejected values, and
-isolation between different database connections.
+Both semantic and exact searches return the shared `SearchHit` data model.
 
-**Remaining evaluation work**
+For each result:
 
-Successful execution of these methods does not establish HNSW
-recall, latency, or an optimal `ef_search` value.
+```python
+score = 1.0 - distance
+```
 
-Those conclusions require experiments on a representative Wikipedia
-corpus, comparing approximate and exact results at fixed top-K
-values under repeated measurements.
+#### HNSW search breadth
+
+`WikiRepository.set_ef_search(value)` configures MariaDB's `mhnsw_ef_search` session variable.
+
+The method accepts integer values from 1 through 10000.
+
+Invalid types and out-of-range values raise `ValidationError`.
+
+The setting is changed using a parameterized statement:
+
+```sql
+SET SESSION mhnsw_ef_search = %s
+```
+
+Using `SET SESSION` limits the change to the repository's current MariaDB connection.
+
+It does not modify the global server setting or another existing database session.
+
+Integration tests verify:
+
+- Accepted values, including supported boundaries.
+- Rejection of invalid values.
+- Persistence of the configured value on the current connection.
+- Isolation between separate database connections.
+- Unchanged global HNSW settings.
+
+#### Remaining evaluation work
+
+Successful implementation of `search_chunks_exact()` and `set_ef_search()` does not establish HNSW recall, latency, or an optimal search-breadth setting.
+
+These conclusions require controlled experiments using the real Wikipedia corpus.
+
+The evaluation should compare exact and approximate results for identical query embeddings, fixed top-K values, and documented HNSW settings.
+
+Measurements should use repeated runs and report both retrieval quality and latency.
+
+Results must be documented without presenting synthetic integration-test outcomes as Wikipedia retrieval benchmarks.
 
 ## 7. Verification and maintenance checklist
 

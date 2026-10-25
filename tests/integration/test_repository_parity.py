@@ -327,3 +327,37 @@ def test_filtered_search_parity(
     for hit in hits:
         assert hit.score == pytest.approx(1.0 - hit.distance)
         assert 0.0 <= hit.distance <= 2.0
+
+
+@pytest.mark.parametrize(
+    "invalid_filters",
+    (
+        SearchFilters(topics=(None,)),
+        SearchFilters(article_ids=(True,)),
+        SearchFilters(min_length_chars=-1),
+        SearchFilters(max_distance="0.2"),
+    ),
+)
+def test_invalid_search_filter_parity(
+    repository: InMemoryRepository | WikiRepository,
+    invalid_filters: SearchFilters,
+) -> None:
+    """Reject invalid filters consistently in both repositories.
+
+    Args:
+        repository: Fake or MariaDB repository.
+        invalid_filters: Search constraints containing an invalid value.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with pytest.raises(ValidationError):
+        repository.search_chunks(
+            query_vector,
+            filters=invalid_filters,
+        )
+
+    with pytest.raises(ValidationError):
+        repository.search_chunks_exact(
+            query_vector,
+            filters=invalid_filters,
+        )

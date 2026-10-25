@@ -52,3 +52,52 @@ jobs:
       # Run tests without requiring MariaDB or external services.
       - name: Run unit tests
         run: uv run --no-sync python -m pytest -m unit -q
+
+    mariadb-integration:
+    name: MariaDB 11.8 integration tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.14
+
+      - name: Install project
+        run: uv sync --python 3.14 --extra dev --locked
+
+      - name: Configure temporary test credentials
+        shell: bash
+        run: |
+          {
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=13307"
+            echo "DB_NAME=wikirag"
+            echo "DB_NAME_TEST=wikirag_test"
+            echo "DB_USER=wikirag"
+            echo "DB_PASSWORD=$(openssl rand -hex 32)"
+            echo "MARIADB_ROOT_PASSWORD=$(openssl rand -hex 32)"
+            echo "EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2"
+            echo "LOG_LEVEL=INFO"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare MariaDB test database
+        run: make setup-test-db
+
+      - name: Report MariaDB server version
+        run: |
+          docker compose exec -T db sh -c \
+            'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root -e "SELECT VERSION() AS mariadb_version;"'
+
+      - name: Run MariaDB integration tests
+        run: uv run --no-sync python -m pytest -m integration -q
+
+      - name: Stop MariaDB
+        if: always()
+        run: docker compose down

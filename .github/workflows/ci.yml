@@ -1,5 +1,5 @@
 
-# Automatically check the WikiRAG foundation on pull requests.
+# Automatically check WikiRAG on pull requests and pushes to main.
 name: Python CI
 
 on:
@@ -33,7 +33,6 @@ jobs:
         run: uv python install 3.14
 
       # Install development dependencies using our committed lock file.
-      # The real embedding model is not needed for these unit tests.
       - name: Install project
         run: uv sync --python 3.14 --extra dev --locked
 
@@ -53,7 +52,7 @@ jobs:
       - name: Run unit tests
         run: uv run --no-sync python -m pytest -m unit -q
 
-    mariadb-integration:
+  mariadb-integration:
     name: MariaDB 11.8 integration tests
     runs-on: ubuntu-latest
 

@@ -574,7 +574,7 @@ class WikiRepository:
         return self._article_from_row(row)
 
     def get_article_by_title(self, title: str) -> ArticleRecord | None:
-        """Retrieve an article by its title, ignoring letter case.
+        """Retrieve an article using exact, case-sensitive title matching.
 
         Args:
             title: Wikipedia article title.

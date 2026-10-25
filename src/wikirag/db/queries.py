@@ -100,7 +100,6 @@ INSERT INTO links (source_article_id, target_title, target_article_id)
 VALUES (%s, %s, NULL)
 """
 
-
 GET_ARTICLE_BY_ID = """
 SELECT article_id, title, url, revision_id, revised_at,
        length_chars, fingerprint, topic, language, fetched_at
@@ -108,12 +107,12 @@ FROM articles
 WHERE article_id = %s
 """
 
+# Match titles exactly using the schema's binary collation.
 GET_ARTICLE_BY_TITLE = """
 SELECT article_id, title, url, revision_id, revised_at,
        length_chars, fingerprint, topic, language, fetched_at
 FROM articles
-WHERE LOWER(title) = LOWER(%s)
-ORDER BY article_id
+WHERE title = %s
 LIMIT 1
 """
 
@@ -168,12 +167,11 @@ HAVING COUNT(DISTINCT ac.article_id) >= %s
 ORDER BY c.name
 """
 
-
-# Match outgoing Wikipedia link titles with stored articles.
+# Resolve outgoing links only to articles with exactly matching titles.
 RESOLVE_LINK_TARGETS = """
 UPDATE links AS l
 LEFT JOIN articles AS a
-    ON LOWER(l.target_title) = LOWER(a.title)
+    ON l.target_title = a.title
 SET l.target_article_id = a.article_id
 """
 

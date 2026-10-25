@@ -141,7 +141,7 @@ Implemented and exercised against MariaDB locally:
 
 A failed SQL operation rolls back the article's metadata and related rows together. Tests include an intentional failure late in a write sequence and verify that the preexisting data remains intact. Article deletion cascades to its chunks/outgoing link and category-association rows; incoming links keep the title but have their resolved target ID set to `NULL`.
 
-**Follow-up compatibility check:** `get_article_by_title()` and `resolve_links()` currently use SQL `LOWER(...)` comparisons, while the in-memory fake uses Python `casefold()`. Those operations are not identical for every Unicode string, and binary title uniqueness also permits titles distinguished only by case. Ambiguous/case-sensitive Wikipedia titles require deliberate policy and additional tests before claiming complete fake-versus-real equivalence.
+**Title matching policy:** get_article_by_title() and resolve_links() use exact, case-sensitive title matching, consistent with the database's binary title collation. The in-memory fake follows the same policy. The Wikipedia ingestion pipeline must normalize article titles and outgoing link titles consistently before storage.
 
 ## 5. Verified evidence (not benchmark results)
 

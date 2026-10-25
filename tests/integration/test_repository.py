@@ -516,10 +516,10 @@ def test_get_article_reconstructs_metadata(
         assert repo.get_article(999999) is None
 
 
-def test_get_article_by_title_ignores_case(
+def test_get_article_by_title_matches_exact_case(
     test_db_config: DbConfig,
 ) -> None:
-    """Retrieve an article using a differently capitalized title.
+    """Verify article title lookup uses exact case-sensitive matching.
 
     Args:
         test_db_config: Isolated MariaDB test configuration.
@@ -529,11 +529,59 @@ def test_get_article_by_title_ignores_case(
     with WikiRepository(test_db_config) as repo:
         repo.ingest_article(article, _example_chunks())
 
-        stored = repo.get_article_by_title("test physics article")
+        stored = repo.get_article_by_title("Test Physics Article")
 
         assert stored is not None
         assert stored.article_id == article.article_id
+        assert repo.get_article_by_title("test physics article") is None
         assert repo.get_article_by_title("Nonexistent article") is None
+
+
+def test_case_distinct_titles_and_links(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify case-distinct titles remain separate during link resolution.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    base = _example_article()
+
+    first = replace(
+        base,
+        title="Apple",
+        linked_titles=(),
+    )
+
+    second = replace(
+        base,
+        article_id=990002,
+        title="APPLE",
+        fingerprint="b" * 64,
+        linked_titles=(),
+    )
+
+    source = replace(
+        base,
+        article_id=990003,
+        title="Source Article",
+        fingerprint="c" * 64,
+        linked_titles=("Apple", "APPLE"),
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(first, _example_chunks())
+        repo.ingest_article(second, _example_chunks())
+        repo.ingest_article(source, _example_chunks())
+
+        assert repo.get_article_by_title("Apple").article_id == 990001
+        assert repo.get_article_by_title("APPLE").article_id == 990002
+        assert repo.get_article_by_title("apple") is None
+
+        assert repo.resolve_links() == 2
+
+        linked = repo.get_linked_articles(source.article_id)
+        assert [article.article_id for article in linked] == [990001, 990002]
 
 
 def test_get_chunk_and_neighbors(

@@ -1,11 +1,14 @@
 """Unit tests for semantic and hybrid retrieval."""
 
 from dataclasses import FrozenInstanceError
+from datetime import datetime
 
 import pytest
 
-from wikirag.errors import ValidationError
-from wikirag.models import SearchFilters
+from tests.fakes import FakeEmbedder
+from wikirag.config import EMBEDDING_DIM, EMBEDDING_MODEL_NAME
+from wikirag.errors import SchemaMismatchError, ValidationError
+from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 from wikirag.retrieval.retriever import Retriever
 
 
@@ -153,3 +156,75 @@ def test_retrieval_preserves_search_hits(
     assert hit.text == "MariaDB is a database."
     assert 0.0 <= hit.distance <= 2.0
     assert hit.score == pytest.approx(1.0 - hit.distance)
+
+
+def test_hybrid_filters_populated_repository_while_semantic_returns_both(
+    fake_repo,
+    fake_embedder,
+) -> None:
+    vector = tuple(1.0 if index == 0 else 0.0 for index in range(EMBEDDING_DIM))
+    articles = (
+        ArticleRecord(
+            article_id=101,
+            title="Physics",
+            url="https://en.wikipedia.org/wiki/Physics",
+            revision_id=1,
+            fingerprint="a" * 64,
+            revised_at=datetime(2026, 1, 1),
+            length_chars=100,
+            fetched_at=datetime(2026, 1, 1),
+            topic="physics",
+        ),
+        ArticleRecord(
+            article_id=102,
+            title="History",
+            url="https://en.wikipedia.org/wiki/History",
+            revision_id=1,
+            fingerprint="b" * 64,
+            revised_at=datetime(2026, 1, 1),
+            length_chars=100,
+            fetched_at=datetime(2026, 1, 1),
+            topic="history",
+        ),
+    )
+
+    for article in articles:
+        fake_repo.ingest_article(
+            article,
+            [
+                ChunkRecord(
+                    chunk_index=0,
+                    text=f"Content about {article.title.lower()}.",
+                    embedding=vector,
+                )
+            ],
+        )
+
+    retriever = Retriever(fake_repo, fake_embedder)
+    filters = SearchFilters(topics=("physics",))
+
+    hybrid = retriever.retrieve(
+        "Explain the topic",
+        mode="hybrid",
+        filters=filters,
+    )
+    semantic = retriever.retrieve(
+        "Explain the topic",
+        mode="semantic",
+        filters=filters,
+    )
+
+    assert {hit.article_id for hit in hybrid.hits} == {101}
+    assert {hit.article_id for hit in semantic.hits} == {101, 102}
+    assert semantic.filters is None
+
+
+def test_constructor_rejects_incompatible_embedding_model(
+    fake_repo,
+    fake_embedder,
+) -> None:
+    fake_repo.ensure_embedding_meta(EMBEDDING_MODEL_NAME, EMBEDDING_DIM)
+    incompatible_embedder = FakeEmbedder(model_name="different-model")
+
+    with pytest.raises(SchemaMismatchError):
+        Retriever(fake_repo, incompatible_embedder)

@@ -11,11 +11,12 @@ from wikirag.models import (
     RetrievalMode,
     RetrievalResult,
     SearchFilters,
+    SearchHit,
 )
 
 
-class Embedder(Protocol):
-    """Interface required by the retriever."""
+class RetrieverEmbedder(Protocol):
+    """Temporary narrow interface until the shared embedder interface lands."""
 
     @property
     def model_name(self) -> str: ...
@@ -33,8 +34,8 @@ class Embedder(Protocol):
     ) -> list[list[float]]: ...
 
 
-class WikiRepository(Protocol):
-    """Repository operations required by the retriever."""
+class RetrieverRepository(Protocol):
+    """Temporary narrow interface until the shared repository interface lands."""
 
     def ensure_embedding_meta(self, model_name: str, dim: int) -> None: ...
 
@@ -44,13 +45,22 @@ class WikiRepository(Protocol):
         *,
         top_k: int = 5,
         filters: SearchFilters | None = None,
-    ): ...
+    ) -> list[SearchHit]: ...
 
 
 class Retriever:
     """Retrieve ranked article chunks using semantic or hybrid search."""
 
-    def __init__(self, repo: WikiRepository, embedder: Embedder) -> None:
+    def __init__(self, repo: RetrieverRepository, embedder: RetrieverEmbedder) -> None:
+        """Initialize retrieval and validate embedding compatibility.
+
+        Args:
+            repo: Repository used to validate metadata and search chunks.
+            embedder: Embedder used to create query vectors.
+
+        Raises:
+            SchemaMismatchError: If stored embedding metadata is incompatible.
+        """
         self._repo = repo
         self._embedder = embedder
 
@@ -68,7 +78,20 @@ class Retriever:
         mode: RetrievalMode = "semantic",
         filters: SearchFilters | None = None,
     ) -> RetrievalResult:
-        """Embed a query, search the repository, and return ranked hits."""
+        """Embed a query, search the repository, and return ranked hits.
+
+        Args:
+            query: Non-empty user query.
+            top_k: Maximum number of hits to return, between 1 and 100.
+            mode: ``semantic`` ignores filters; ``hybrid`` applies them.
+            filters: Optional search constraints used only in hybrid mode.
+
+        Returns:
+            RetrievalResult containing ranked hits and timing measurements.
+
+        Raises:
+            ValidationError: If the query, limit, mode, or hybrid filters are invalid.
+        """
 
         if not isinstance(query, str) or not query.strip():
             raise ValidationError("Query must be a non-empty string")

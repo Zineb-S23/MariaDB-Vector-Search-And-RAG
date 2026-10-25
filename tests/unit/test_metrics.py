@@ -96,3 +96,33 @@ def test_precision_at_k_deduplicates_article_ids_preserving_rank_order() -> None
 @pytest.mark.unit
 def test_reciprocal_rank_deduplicates_article_ids_preserving_rank_order() -> None:
     assert reciprocal_rank([10, 10, 20], {20}) == pytest.approx(1 / 2)
+
+
+@pytest.mark.unit
+def test_recall_at_k_deduplicates_relevant_ids() -> None:
+    assert recall_at_k([20], [20, 20], 1) == 1.0
+
+
+@pytest.mark.unit
+def test_recall_at_k_deduplicates_retrieved_ids() -> None:
+    assert recall_at_k([10, 10, 20], {20, 30}, 2) == 0.5
+
+
+@pytest.mark.unit
+def test_metrics_handle_empty_retrieval_results() -> None:
+    relevant = {10}
+
+    assert recall_at_k([], relevant, 3) == 0.0
+    assert precision_at_k([], relevant, 3) == 0.0
+    assert reciprocal_rank([], relevant) == 0.0
+
+
+@pytest.mark.unit
+def test_metrics_evaluate_unique_article_ids() -> None:
+    # Repeated hits for article 101 represent the same article, not separate results.
+    retrieved = [101, 101, 202]
+    relevant = {202}
+
+    assert recall_at_k(retrieved, relevant, 2) == 1.0
+    assert precision_at_k(retrieved, relevant, 2) == 0.5
+    assert reciprocal_rank(retrieved, relevant) == 0.5

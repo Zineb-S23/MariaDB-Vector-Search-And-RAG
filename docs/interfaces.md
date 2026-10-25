@@ -281,6 +281,8 @@ class WikiRepository:
 
 `resolve_links()` runs once after ingestion, resolves links only to in-corpus articles, and returns the number resolved. `delete_article()` returns `False` if the article does not exist; otherwise it removes dependent records.
 
+Article title lookup and link resolution use exact, case-sensitive title matching, consistent with the database's binary title collation. The ingestion pipeline must normalize Wikipedia titles consistently before storing articles and outgoing links.
+
 ### 5.3 Search semantics
 
 - Validate `top_k` (integer from 1 to 100) and query vector.

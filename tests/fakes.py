@@ -495,9 +495,8 @@ class InMemoryRepository:
 
         self._check_open()
 
-        title_to_id = {
-            article.title.casefold(): article.article_id for article in self._articles.values()
-        }
+        # Match Wikipedia titles exactly, as in the MariaDB repository.
+        title_to_id = {article.title: article.article_id for article in self._articles.values()}
 
         resolved: dict[int, set[int]] = {}
 
@@ -505,7 +504,7 @@ class InMemoryRepository:
             targets: set[int] = set()
 
             for linked_title in article.linked_titles:
-                target_id = title_to_id.get(linked_title.casefold())
+                target_id = title_to_id.get(linked_title)
 
                 if target_id is not None:
                     targets.add(target_id)
@@ -832,7 +831,7 @@ class InMemoryRepository:
         self._check_open()
 
         for article in self._articles.values():
-            if article.title.casefold() == title.casefold():
+            if article.title == title:
                 return article
 
         return None

@@ -487,3 +487,132 @@ def test_ingest_database_error_rolls_back_update(
             "Quantum mechanics",
             "Relativity",
         ]
+
+
+def test_get_article_reconstructs_metadata(
+    test_db_config: DbConfig,
+) -> None:
+    """Read stored article metadata, categories and outgoing links.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        stored = repo.get_article(article.article_id)
+
+        assert stored is not None
+        assert stored.article_id == article.article_id
+        assert stored.title == article.title
+        assert stored.fingerprint == article.fingerprint
+        assert stored.revision_id == article.revision_id
+        assert stored.topic == article.topic
+        assert set(stored.categories) == set(article.categories)
+        assert set(stored.linked_titles) == set(article.linked_titles)
+
+        assert repo.get_article(999999) is None
+
+
+def test_get_article_by_title_ignores_case(
+    test_db_config: DbConfig,
+) -> None:
+    """Retrieve an article using a differently capitalized title.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        stored = repo.get_article_by_title("test physics article")
+
+        assert stored is not None
+        assert stored.article_id == article.article_id
+        assert repo.get_article_by_title("Nonexistent article") is None
+
+
+def test_get_chunk_and_neighbors(
+    test_db_config: DbConfig,
+) -> None:
+    """Read a chunk and its surrounding positions in order.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    third = ChunkRecord(
+        chunk_index=2,
+        text="The third paragraph.",
+        embedding=(0.0, 0.0, 1.0) + (0.0,) * 381,
+    )
+    chunks = (*_example_chunks(), third)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, chunks)
+
+        # Obtain the actual auto-generated chunk identifiers.
+        with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT chunk_id FROM chunks WHERE article_id = %s ORDER BY chunk_index",
+                (article.article_id,),
+            )
+            ids = [row["chunk_id"] for row in cursor.fetchall()]
+
+        middle = repo.get_chunk(ids[1])
+
+        assert middle is not None
+        assert middle.chunk_index == 1
+        assert middle.article_title == article.title
+        assert middle.text == chunks[1].text
+
+        neighbors = repo.get_neighbor_chunks(ids[1], window=1)
+        assert [chunk.chunk_index for chunk in neighbors] == [0, 1, 2]
+
+        center_only = repo.get_neighbor_chunks(ids[1], window=0)
+        assert [chunk.chunk_index for chunk in center_only] == [1]
+
+        assert repo.get_chunk(999999) is None
+        assert repo.get_neighbor_chunks(999999) == []
+
+        with pytest.raises(ValidationError):
+            repo.get_neighbor_chunks(ids[1], window=-1)
+
+
+def test_list_topics_and_categories(
+    test_db_config: DbConfig,
+) -> None:
+    """Filter category names by article count and list corpus topics.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    first = _example_article()
+
+    second = replace(
+        first,
+        article_id=990002,
+        title="Second Physics Article",
+        url="https://en.wikipedia.org/wiki/Second_Physics_Article",
+        fingerprint="b" * 64,
+        topic="science",
+        categories=("Physics",),
+        linked_titles=(),
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(first, _example_chunks())
+        repo.ingest_article(second, _example_chunks())
+
+        assert repo.list_topics() == ["physics", "science"]
+        assert repo.list_categories() == ["Physics", "Science"]
+        assert repo.list_categories(min_articles=2) == ["Physics"]
+        assert repo.list_categories(min_articles=3) == []
+
+        with pytest.raises(ValidationError):
+            repo.list_categories(min_articles=0)

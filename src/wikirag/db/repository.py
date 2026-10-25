@@ -21,14 +21,22 @@ from wikirag.db.queries import (
     DELETE_ARTICLE_CHUNKS,
     DELETE_OUTGOING_LINKS,
     ENSURE_EMBEDDING_META,
+    GET_ARTICLE_BY_ID,
+    GET_ARTICLE_BY_TITLE,
+    GET_ARTICLE_CATEGORIES,
+    GET_ARTICLE_LINK_TITLES,
     GET_CATEGORY_ID,
+    GET_CHUNK,
     GET_EMBEDDING_META,
     GET_FINGERPRINT,
     GET_FINGERPRINT_FOR_UPDATE,
+    GET_NEIGHBOR_CHUNKS,
     INSERT_ARTICLE,
     INSERT_ARTICLE_CATEGORY,
     INSERT_CHUNK,
     INSERT_OUTGOING_LINK,
+    LIST_CATEGORIES,
+    LIST_TOPICS,
     UPDATE_ARTICLE,
     UPSERT_CATEGORY,
 )
@@ -39,7 +47,12 @@ from wikirag.errors import (
     SchemaMismatchError,
     ValidationError,
 )
-from wikirag.models import ArticleRecord, ChunkRecord, IngestOutcome
+from wikirag.models import (
+    ArticleRecord,
+    ChunkRecord,
+    IngestOutcome,
+    StoredChunk,
+)
 
 
 class WikiRepository:
@@ -470,3 +483,224 @@ class WikiRepository:
                 )
 
             return outcome
+
+    def _fetch_all(
+        self,
+        statement: str,
+        params: tuple[object, ...] = (),
+    ) -> list[dict[str, Any]]:
+        """Execute a SELECT query and return all matching rows.
+
+        Args:
+            statement: Parameterized SQL SELECT statement.
+            params: Query parameter values.
+
+        Returns:
+            list[dict[str, Any]]: Rows returned by MariaDB.
+
+        Raises:
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If the query fails.
+        """
+        self._check_open()
+
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(statement, params)
+                return list(cursor.fetchall())
+        except pymysql.err.OperationalError:
+            raise DatabaseConnectionError("Database connection failed during query") from None
+        except pymysql.MySQLError:
+            raise DatabaseError("Database query failed") from None
+
+    def _article_from_row(
+        self,
+        row: dict[str, Any],
+    ) -> ArticleRecord:
+        """Convert a database row into a complete ArticleRecord.
+
+        Args:
+            row: Article metadata retrieved from MariaDB.
+
+        Returns:
+            ArticleRecord: Metadata, categories, and outgoing link titles.
+
+        Raises:
+            DatabaseConnectionError: If the connection fails.
+            DatabaseError: If related metadata cannot be retrieved.
+        """
+        article_id = int(row["article_id"])
+
+        category_rows = self._fetch_all(GET_ARTICLE_CATEGORIES, (article_id,))
+        link_rows = self._fetch_all(GET_ARTICLE_LINK_TITLES, (article_id,))
+
+        return ArticleRecord(
+            article_id=article_id,
+            title=row["title"],
+            url=row["url"],
+            revision_id=int(row["revision_id"]),
+            fingerprint=row["fingerprint"],
+            revised_at=row["revised_at"],
+            length_chars=int(row["length_chars"]),
+            fetched_at=row["fetched_at"],
+            topic=row["topic"],
+            language=row["language"],
+            categories=tuple(item["name"] for item in category_rows),
+            linked_titles=tuple(item["target_title"] for item in link_rows),
+        )
+
+    def get_article(self, article_id: int) -> ArticleRecord | None:
+        """Retrieve a Wikipedia article by its page identifier.
+
+        Args:
+            article_id: Wikipedia page identifier.
+
+        Returns:
+            ArticleRecord | None: Full article metadata or None.
+
+        Raises:
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If a database query fails.
+        """
+        row = self._fetch_one(GET_ARTICLE_BY_ID, (article_id,))
+
+        if row is None:
+            return None
+
+        return self._article_from_row(row)
+
+    def get_article_by_title(self, title: str) -> ArticleRecord | None:
+        """Retrieve an article by its title, ignoring letter case.
+
+        Args:
+            title: Wikipedia article title.
+
+        Returns:
+            ArticleRecord | None: Matching article or None.
+
+        Raises:
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If a database query fails.
+        """
+        row = self._fetch_one(GET_ARTICLE_BY_TITLE, (title,))
+
+        if row is None:
+            return None
+
+        return self._article_from_row(row)
+
+    @staticmethod
+    def _chunk_from_row(row: dict[str, Any]) -> StoredChunk:
+        """Convert a MariaDB result row into a StoredChunk.
+
+        Args:
+            row: Database row containing chunk and article information.
+
+        Returns:
+            StoredChunk: Structured chunk with its source article title.
+        """
+        return StoredChunk(
+            chunk_id=int(row["chunk_id"]),
+            article_id=int(row["article_id"]),
+            article_title=row["article_title"],
+            chunk_index=int(row["chunk_index"]),
+            section_title=row["section_title"],
+            text=row["text"],
+        )
+
+    def get_chunk(self, chunk_id: int) -> StoredChunk | None:
+        """Retrieve a stored chunk by its database identifier.
+
+        Args:
+            chunk_id: Unique identifier of the chunk.
+
+        Returns:
+            StoredChunk | None: Matching chunk or None.
+
+        Raises:
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If the query fails.
+        """
+        row = self._fetch_one(GET_CHUNK, (chunk_id,))
+
+        if row is None:
+            return None
+
+        return self._chunk_from_row(row)
+
+    def get_neighbor_chunks(
+        self,
+        chunk_id: int,
+        *,
+        window: int = 1,
+    ) -> list[StoredChunk]:
+        """Retrieve a chunk and its neighbors within the same article.
+
+        Args:
+            chunk_id: Identifier of the central chunk.
+            window: Number of chunk positions to include on each side.
+
+        Returns:
+            list[StoredChunk]: Chunks in ascending chunk-index order,
+                or an empty list if the central chunk is missing.
+
+        Raises:
+            ValidationError: If window is negative or not an integer.
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If a query fails.
+        """
+        self._check_open()
+
+        if type(window) is not int or window < 0:
+            raise ValidationError("window must be a non-negative integer")
+
+        center = self.get_chunk(chunk_id)
+
+        if center is None:
+            return []
+
+        rows = self._fetch_all(
+            GET_NEIGHBOR_CHUNKS,
+            (
+                center.article_id,
+                max(0, center.chunk_index - window),
+                center.chunk_index + window,
+            ),
+        )
+
+        return [self._chunk_from_row(row) for row in rows]
+
+    def list_topics(self) -> list[str]:
+        """List distinct, non-empty Wikipedia corpus topics.
+
+        Returns:
+            list[str]: Topic names in alphabetical order.
+
+        Raises:
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If the query fails.
+        """
+        rows = self._fetch_all(LIST_TOPICS)
+        return [row["topic"] for row in rows]
+
+    def list_categories(self, *, min_articles: int = 1) -> list[str]:
+        """List categories associated with enough stored articles.
+
+        Args:
+            min_articles: Minimum number of distinct articles required.
+
+        Returns:
+            list[str]: Matching category names in alphabetical order.
+
+        Raises:
+            ValidationError: If min_articles is not positive.
+            DatabaseConnectionError: If the connection is unavailable.
+            DatabaseError: If the query fails.
+        """
+        self._check_open()
+
+        if type(min_articles) is not int or min_articles < 1:
+            raise ValidationError("min_articles must be a positive integer")
+
+        rows = self._fetch_all(LIST_CATEGORIES, (min_articles,))
+        return [row["name"] for row in rows]

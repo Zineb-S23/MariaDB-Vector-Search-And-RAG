@@ -99,3 +99,71 @@ INSERT_OUTGOING_LINK = """
 INSERT INTO links (source_article_id, target_title, target_article_id)
 VALUES (%s, %s, NULL)
 """
+
+
+GET_ARTICLE_BY_ID = """
+SELECT article_id, title, url, revision_id, revised_at,
+       length_chars, fingerprint, topic, language, fetched_at
+FROM articles
+WHERE article_id = %s
+"""
+
+GET_ARTICLE_BY_TITLE = """
+SELECT article_id, title, url, revision_id, revised_at,
+       length_chars, fingerprint, topic, language, fetched_at
+FROM articles
+WHERE LOWER(title) = LOWER(%s)
+ORDER BY article_id
+LIMIT 1
+"""
+
+GET_ARTICLE_CATEGORIES = """
+SELECT c.name
+FROM categories AS c
+JOIN article_categories AS ac
+    ON ac.category_id = c.category_id
+WHERE ac.article_id = %s
+ORDER BY c.name
+"""
+
+GET_ARTICLE_LINK_TITLES = """
+SELECT target_title
+FROM links
+WHERE source_article_id = %s
+ORDER BY target_title
+"""
+
+GET_CHUNK = """
+SELECT c.chunk_id, c.article_id, a.title AS article_title,
+       c.chunk_index, c.section_title, c.text
+FROM chunks AS c
+JOIN articles AS a ON a.article_id = c.article_id
+WHERE c.chunk_id = %s
+"""
+
+GET_NEIGHBOR_CHUNKS = """
+SELECT c.chunk_id, c.article_id, a.title AS article_title,
+       c.chunk_index, c.section_title, c.text
+FROM chunks AS c
+JOIN articles AS a ON a.article_id = c.article_id
+WHERE c.article_id = %s
+  AND c.chunk_index BETWEEN %s AND %s
+ORDER BY c.chunk_index
+"""
+
+LIST_TOPICS = """
+SELECT DISTINCT topic
+FROM articles
+WHERE topic IS NOT NULL AND topic <> ''
+ORDER BY topic
+"""
+
+LIST_CATEGORIES = """
+SELECT c.name
+FROM categories AS c
+JOIN article_categories AS ac
+    ON ac.category_id = c.category_id
+GROUP BY c.category_id, c.name
+HAVING COUNT(DISTINCT ac.article_id) >= %s
+ORDER BY c.name
+"""

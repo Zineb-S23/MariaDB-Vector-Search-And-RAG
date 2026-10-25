@@ -1,5 +1,6 @@
 """Integration tests for the MariaDB-backed WikiRepository."""
 
+import json
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime
@@ -17,9 +18,12 @@ from wikirag.db.repository import WikiRepository
 from wikirag.db.schema import init_schema
 from wikirag.errors import (
     DatabaseConnectionError,
+    DatabaseError,
+    EmbeddingDimensionError,
     SchemaMismatchError,
     ValidationError,
 )
+from wikirag.models import ArticleRecord, ChunkRecord
 
 
 @pytest.fixture
@@ -206,3 +210,280 @@ def test_repository_rejects_calls_after_close(
 
     with pytest.raises(DatabaseConnectionError):
         repo.get_fingerprint(123456)
+
+
+def _example_article() -> ArticleRecord:
+    """Build deterministic metadata for an integration-test article.
+
+    Returns:
+        ArticleRecord: Example article with categories and links.
+    """
+    return ArticleRecord(
+        article_id=990001,
+        title="Test Physics Article",
+        url="https://en.wikipedia.org/wiki/Test_Physics_Article",
+        revision_id=10,
+        fingerprint="a" * 64,
+        revised_at=datetime(2026, 1, 1),
+        fetched_at=datetime(2026, 1, 2),
+        length_chars=80,
+        topic="physics",
+        categories=("Physics", "Science"),
+        linked_titles=("Relativity", "Quantum mechanics"),
+    )
+
+
+def _example_chunks() -> tuple[ChunkRecord, ...]:
+    """Create two chunks containing valid 384-dimensional vectors.
+
+    Returns:
+        tuple[ChunkRecord, ...]: Two ordered test chunks.
+    """
+    first = (1.0,) + (0.0,) * 383
+    second = (0.0, 1.0) + (0.0,) * 382
+
+    return (
+        ChunkRecord(
+            chunk_index=0,
+            text="Physics explains motion.",
+            embedding=first,
+        ),
+        ChunkRecord(
+            chunk_index=1,
+            text="Energy and matter interact.",
+            embedding=second,
+        ),
+    )
+
+
+def test_ingest_inserts_all_related_records(
+    test_db_config: DbConfig,
+) -> None:
+    """Store article metadata, native vectors, categories and links.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, _example_chunks()) == "inserted"
+        assert repo.count_articles() == 1
+        assert repo.count_chunks() == 2
+        assert repo.get_fingerprint(article.article_id) == article.fingerprint
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT chunk_index, text, char_count, "
+            "VEC_ToText(embedding) AS vector_json "
+            "FROM chunks WHERE article_id = %s ORDER BY chunk_index",
+            (article.article_id,),
+        )
+        rows = cursor.fetchall()
+
+        assert [row["chunk_index"] for row in rows] == [0, 1]
+        assert rows[0]["char_count"] == len(_example_chunks()[0].text)
+
+        # Read the actual native VECTOR value back from MariaDB.
+        vector = json.loads(rows[0]["vector_json"])
+        assert len(vector) == 384
+        assert vector[:3] == [1.0, 0.0, 0.0]
+
+        cursor.execute(
+            "SELECT c.name FROM categories AS c "
+            "JOIN article_categories AS ac "
+            "ON ac.category_id = c.category_id "
+            "WHERE ac.article_id = %s ORDER BY c.name",
+            (article.article_id,),
+        )
+        assert [row["name"] for row in cursor.fetchall()] == [
+            "Physics",
+            "Science",
+        ]
+
+        cursor.execute(
+            "SELECT target_title, target_article_id FROM links "
+            "WHERE source_article_id = %s ORDER BY target_title",
+            (article.article_id,),
+        )
+        links = cursor.fetchall()
+
+        assert [row["target_title"] for row in links] == [
+            "Quantum mechanics",
+            "Relativity",
+        ]
+        assert all(row["target_article_id"] is None for row in links)
+
+
+def test_ingest_unchanged_fingerprint_skips_writes(
+    test_db_config: DbConfig,
+) -> None:
+    """Preserve records when the incoming fingerprint is unchanged.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, _example_chunks()) == "inserted"
+
+        unchanged = replace(
+            article,
+            title="Should Not Replace Original Title",
+        )
+
+        assert repo.ingest_article(unchanged, _example_chunks()) == "skipped"
+        assert repo.count_chunks() == 2
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT title FROM articles WHERE article_id = %s",
+            (article.article_id,),
+        )
+        assert cursor.fetchone()["title"] == article.title
+
+
+def test_ingest_changed_fingerprint_replaces_associations(
+    test_db_config: DbConfig,
+) -> None:
+    """Replace chunks, categories and links when article content changes.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    changed = replace(
+        article,
+        title="Revised Physics Article",
+        fingerprint="b" * 64,
+        revision_id=11,
+        categories=("New category",),
+        linked_titles=("New destination",),
+    )
+
+    replacement = (replace(_example_chunks()[1], chunk_index=0),)
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, _example_chunks()) == "inserted"
+        assert repo.ingest_article(changed, replacement) == "updated"
+
+        assert repo.get_fingerprint(article.article_id) == changed.fingerprint
+        assert repo.count_articles() == 1
+        assert repo.count_chunks() == 1
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT title FROM articles WHERE article_id = %s",
+            (article.article_id,),
+        )
+        assert cursor.fetchone()["title"] == changed.title
+
+        cursor.execute(
+            "SELECT text FROM chunks WHERE article_id = %s",
+            (article.article_id,),
+        )
+        assert [row["text"] for row in cursor.fetchall()] == [
+            replacement[0].text,
+        ]
+
+        cursor.execute(
+            "SELECT c.name FROM categories AS c "
+            "JOIN article_categories AS ac "
+            "ON ac.category_id = c.category_id "
+            "WHERE ac.article_id = %s",
+            (article.article_id,),
+        )
+        assert [row["name"] for row in cursor.fetchall()] == [
+            "New category",
+        ]
+
+        cursor.execute(
+            "SELECT target_title FROM links WHERE source_article_id = %s",
+            (article.article_id,),
+        )
+        assert [row["target_title"] for row in cursor.fetchall()] == [
+            "New destination",
+        ]
+
+
+def test_ingest_invalid_embedding_leaves_database_empty(
+    test_db_config: DbConfig,
+) -> None:
+    """Reject invalid vector dimensions before changing the database.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    invalid = replace(
+        _example_chunks()[0],
+        embedding=(1.0,) * 383,
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises(EmbeddingDimensionError):
+            repo.ingest_article(_example_article(), (invalid,))
+
+        assert repo.count_articles() == 0
+        assert repo.count_chunks() == 0
+
+
+def test_ingest_database_error_rolls_back_update(
+    test_db_config: DbConfig,
+) -> None:
+    """Preserve existing data when a later database write fails.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    updated = replace(
+        article,
+        fingerprint="b" * 64,
+        categories=("Different category",),
+        linked_titles=("New destination",),
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, _example_chunks()) == "inserted"
+
+    # Deliberately fail an INSERT into links after earlier writes.
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "CREATE TRIGGER fail_wikirag_link_insert "
+            "BEFORE INSERT ON links "
+            "FOR EACH ROW SIGNAL SQLSTATE '45000' "
+            "SET MESSAGE_TEXT = 'Intentional integration-test failure'"
+        )
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises((DatabaseError, DatabaseConnectionError)):
+            repo.ingest_article(updated, _example_chunks()[:1])
+
+        # The failed update must not overwrite the original fingerprint.
+        assert repo.get_fingerprint(article.article_id) == article.fingerprint
+        assert repo.count_chunks() == 2
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT c.name FROM categories AS c "
+            "JOIN article_categories AS ac "
+            "ON ac.category_id = c.category_id "
+            "WHERE ac.article_id = %s ORDER BY c.name",
+            (article.article_id,),
+        )
+        assert [row["name"] for row in cursor.fetchall()] == [
+            "Physics",
+            "Science",
+        ]
+
+        cursor.execute(
+            "SELECT target_title FROM links WHERE source_article_id = %s ORDER BY target_title",
+            (article.article_id,),
+        )
+        assert [row["target_title"] for row in cursor.fetchall()] == [
+            "Quantum mechanics",
+            "Relativity",
+        ]

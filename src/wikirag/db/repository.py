@@ -55,6 +55,8 @@ from wikirag.models import (
     ArticleRecord,
     ChunkRecord,
     IngestOutcome,
+    SearchFilters,
+    SearchHit,
     StoredChunk,
 )
 
@@ -773,3 +775,70 @@ class WikiRepository:
         with transaction(self._conn) as conn, conn.cursor() as cursor:
             cursor.execute(DELETE_ARTICLE_BY_ID, (article_id,))
             return cursor.rowcount > 0
+
+    def search_chunks(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        top_k: int = 5,
+        filters: SearchFilters | None = None,
+    ) -> list[SearchHit]:
+        """Search stored chunks using native MariaDB vector similarity.
+
+        This method is reserved for the database-search implementation.
+        No semantic or hybrid retrieval is performed by this stub.
+
+        Args:
+            query_embedding: Query vector with 384 dimensions.
+            top_k: Maximum number of matching chunks to return.
+            filters: Optional relational search constraints.
+
+        Returns:
+            list[SearchHit]: Ranked matching chunks when implemented.
+
+        Raises:
+            NotImplementedError: Native vector search is not yet implemented.
+        """
+        raise NotImplementedError("search_chunks will be implemented in feature/database-search")
+
+    def search_chunks_exact(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        top_k: int = 5,
+        filters: SearchFilters | None = None,
+    ) -> list[SearchHit]:
+        """Search chunks using an exact cosine-distance baseline.
+
+        This method is reserved for evaluation against HNSW results.
+
+        Args:
+            query_embedding: Query vector with 384 dimensions.
+            top_k: Maximum number of matching chunks to return.
+            filters: Optional relational search constraints.
+
+        Returns:
+            list[SearchHit]: Exact ranked results when implemented.
+
+        Raises:
+            NotImplementedError: Exact vector search is not yet implemented.
+        """
+        raise NotImplementedError(
+            "search_chunks_exact will be implemented in feature/database-search"
+        )
+
+    def set_ef_search(self, value: int) -> None:
+        """Set the HNSW search parameter for the current MariaDB session.
+
+        This method is reserved for the database-search implementation.
+
+        Args:
+            value: Positive integer controlling HNSW search breadth.
+
+        Returns:
+            None: The session setting is updated when implemented.
+
+        Raises:
+            NotImplementedError: HNSW search configuration is not yet implemented.
+        """
+        raise NotImplementedError("set_ef_search will be implemented in feature/database-search")

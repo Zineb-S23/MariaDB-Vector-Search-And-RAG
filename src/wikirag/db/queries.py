@@ -370,5 +370,3 @@ def build_hybrid_search_query(
     )
 
     return statement, tuple(params)
-
-    return statement, tuple(params)

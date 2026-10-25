@@ -884,6 +884,21 @@ class WikiRepository:
 
         rows = self._fetch_all(statement, params)
 
+        return self._search_hits_from_rows(rows)
+
+    @staticmethod
+    def _search_hits_from_rows(
+        rows: Sequence[dict[str, Any]],
+    ) -> list[SearchHit]:
+        """Convert MariaDB search rows into shared SearchHit records.
+
+        Args:
+            rows: Ranked database rows containing chunk metadata
+                and cosine distances.
+
+        Returns:
+            list[SearchHit]: Ranked search results with similarity scores.
+        """
         hits: list[SearchHit] = []
 
         for row in rows:
@@ -912,37 +927,95 @@ class WikiRepository:
         top_k: int = 5,
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
-        """Search chunks using an exact cosine-distance baseline.
+        """Retrieve exact cosine-ranked chunks without using HNSW.
 
-        This method is reserved for evaluation against HNSW results.
+        Scan eligible stored vectors using MariaDB's native
+        VEC_DISTANCE_COSINE function. Apply optional relational
+        filters before selecting the nearest chunks.
 
         Args:
-            query_embedding: Query vector with 384 dimensions.
-            top_k: Maximum number of matching chunks to return.
-            filters: Optional relational search constraints.
+            query_embedding: Numeric query vector containing 384 values.
+            top_k: Maximum number of results, between 1 and 100.
+            filters: Optional relational and distance constraints.
 
         Returns:
-            list[SearchHit]: Exact ranked results when implemented.
+            list[SearchHit]: Exact nearest neighbors ordered by
+                ascending cosine distance.
 
         Raises:
-            NotImplementedError: Exact vector search is not yet implemented.
+            ValidationError: If search parameters are invalid.
+            EmbeddingDimensionError: If the query embedding is invalid.
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If the SQL query fails.
         """
-        raise NotImplementedError(
-            "search_chunks_exact will be implemented in feature/database-search"
+        self._check_open()
+
+        if type(top_k) is not int or not 1 <= top_k <= 100:
+            raise ValidationError("top_k must be an integer between 1 and 100")
+
+        if filters is not None and not isinstance(filters, SearchFilters):
+            raise ValidationError("filters must be SearchFilters or None")
+
+        if filters is not None and filters.max_distance is not None:
+            threshold = filters.max_distance
+
+            if (
+                type(threshold) not in (int, float)
+                or not math.isfinite(threshold)
+                or not 0.0 <= threshold <= 2.0
+            ):
+                raise ValidationError("max_distance must be between 0 and 2")
+
+        vector_json = self._serialize_search_vector(query_embedding)
+
+        # An empty SearchFilters object means no relational constraints.
+        active_filters = filters if filters is not None else SearchFilters()
+
+        # This SQL path excludes the native HNSW index.
+        statement, params = build_hybrid_search_query(
+            active_filters,
+            vector_json=vector_json,
+            top_k=top_k,
         )
 
-    def set_ef_search(self, value: int) -> None:
-        """Set the HNSW search parameter for the current MariaDB session.
+        rows = self._fetch_all(statement, params)
 
-        This method is reserved for the database-search implementation.
+        return self._search_hits_from_rows(rows)
+
+    def set_ef_search(self, value: int) -> None:
+        """Configure HNSW search breadth for this MariaDB session.
+
+        Set the number of vector-index candidates considered during
+        approximate nearest-neighbor search. The setting affects only
+        this repository's current database connection.
 
         Args:
-            value: Positive integer controlling HNSW search breadth.
+            value: HNSW search breadth, an integer from 1 to 10000.
 
         Returns:
-            None: The session setting is updated when implemented.
+            None: The session parameter is updated successfully.
 
         Raises:
-            NotImplementedError: HNSW search configuration is not yet implemented.
+            ValidationError: If value is not an integer from 1 to 10000.
+            DatabaseConnectionError: If the repository is closed or
+                its MariaDB connection becomes unavailable.
+            DatabaseError: If MariaDB rejects the SQL statement.
         """
-        raise NotImplementedError("set_ef_search will be implemented in feature/database-search")
+        self._check_open()
+
+        if type(value) is not int or not 1 <= value <= 10_000:
+            raise ValidationError("ef_search must be an integer between 1 and 10000")
+
+        try:
+            with self._conn.cursor() as cursor:
+                # SESSION changes only this connection, never the global setting.
+                cursor.execute(
+                    "SET SESSION mhnsw_ef_search = %s",
+                    (value,),
+                )
+        except pymysql.err.OperationalError:
+            raise DatabaseConnectionError(
+                "Database connection failed while setting ef_search"
+            ) from None
+        except pymysql.MySQLError:
+            raise DatabaseError("Failed to configure MariaDB HNSW search breadth") from None

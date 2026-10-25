@@ -9,9 +9,23 @@
 The official Area 4 task is not merely to store embeddings. It asks us to query a real Wikipedia corpus using MariaDB 11.8's native `VECTOR` column, HNSW index and `VEC_DISTANCE_COSINE`, while applying relational conditions (such as category, article length, revision date and links) **in the same SQL statement** as semantic ranking. MariaDB also holds article metadata and embeddings in one transactional InnoDB database, avoiding synchronization with an external vector store.
 
 
+
 **Current status:** Real database storage, atomic ingestion,
 relationships, deletion, native semantic retrieval, and hybrid SQL
 filtering have integration-test coverage.
+
+Unfiltered semantic search uses an HNSW-index-eligible MariaDB query.
+Hybrid searches combine relational SQL predicates with exact cosine
+ranking to avoid selective-filter top-K under-fill.
+
+The real repository also implements `search_chunks_exact()` as an
+exact nearest-neighbor evaluation baseline and `set_ef_search()` for
+session-scoped HNSW tuning.
+
+All public database-search methods are now implemented. Recall,
+latency, and HNSW parameter experiments on a representative Wikipedia
+corpus remain outstanding.
+
 
 Unfiltered searches use an HNSW-index-eligible query with
 `VEC_DISTANCE_COSINE`. Filtered searches apply relational SQL
@@ -166,7 +180,14 @@ The following results were reported from the developer's local WSL/Docker enviro
 - Real insertion tests passed using `VEC_FromText` and verified native vector round-tripping with `VEC_ToText`.
 - Real integration tests passed for model metadata, insert/skip/update, category/link persistence, read operations, link resolution/deletion, invalid vector rejection and transactional rollback.
 - `make setup-test-db` succeeded and printed the separate `wikirag_test` database.
-- 237 passed (169 unit tests and 68 integration-marked tests)
+- Latest reported local suite: **249 passed** (167 unit tests and
+  82 integration-marked tests); Ruff lint and formatting checks passed.
+- Exact cosine retrieval was verified against MariaDB, including
+  ranked results, hybrid filters, and invalid-input handling.
+  An EXPLAIN integration test confirmed that the exact-search query
+  does not select the embedding HNSW index.
+- Session-scoped HNSW tuning was verified for supported values,
+  invalid values, connection isolation, and unchanged global settings.
 - Real MariaDB integration tests verified topic, category, article-ID,
   article-length, revision-date, link, and distance filters. Tests
   also verified filtering before top-K and parity with the
@@ -267,7 +288,7 @@ a representative Wikipedia corpus during the database experiments.
 | --- | --- | --- |
 | Hybrid SQL filtering with HNSW | Not measured | Execute semantic search with relational predicates and inspect `EXPLAIN` plans |
 | HNSW top-K under selective filters | Not measured | Compare eligible result counts under increasing filter selectivity |
-| Exact cosine search baseline | Not implemented | Implement `search_chunks_exact()` and verify that its query plan avoids HNSW |
+| Exact cosine search baseline | Implemented and integration-tested | Compare against HNSW over a representative Wikipedia corpus |
 | HNSW vs. exact recall and latency | Not measured | Compare results with repeated runs on the same Wikipedia corpus |
 | Transaction consistency | Ingestion rollback tested; search visibility not measured | Demonstrate consistent vector and metadata visibility during transactions |
 | FULLTEXT compatibility | Not tested; optional | Investigate only after mandatory native vector and hybrid search are complete |
@@ -324,8 +345,53 @@ The latest reported test suite passed 237 tests:
 not an indexed hybrid-search optimization. Performance and HNSW
 recall have not been benchmarked on a representative Wikipedia
 corpus. Runtime validation of malformed individual filter-field
-contents is not yet exhaustive. The public
-`search_chunks_exact()` evaluation method is still pending.
+contents is not yet exhaustive.
+
+
+### 6.5 Exact cosine baseline and HNSW tuning
+
+Milestone 3 implements both remaining database-search methods.
+
+**Exact cosine search**
+
+`WikiRepository.search_chunks_exact()` accepts the same query
+embedding, top-K limit, and optional `SearchFilters` as
+`search_chunks()`.
+
+The method uses MariaDB's native `VEC_DISTANCE_COSINE` function
+and explicitly excludes the `embedding` vector index using
+`IGNORE INDEX (embedding)`.
+
+The query applies relational filters before ranking eligible chunks,
+providing an exact nearest-neighbor baseline for comparing
+approximate HNSW retrieval.
+
+Integration tests verify ranked results, filtering, input validation,
+and execution-plan exclusion of the HNSW index.
+
+**HNSW search breadth**
+
+`WikiRepository.set_ef_search(value)` configures the MariaDB
+`mhnsw_ef_search` session variable.
+
+The implementation accepts integer values from 1 through 10000
+and rejects invalid values with `ValidationError`.
+
+The setting is changed using a parameterized `SET SESSION` query,
+so it affects the repository's current connection rather than the
+global MariaDB configuration.
+
+Integration tests verify accepted values, rejected values, and
+isolation between different database connections.
+
+**Remaining evaluation work**
+
+Successful execution of these methods does not establish HNSW
+recall, latency, or an optimal `ef_search` value.
+
+Those conclusions require experiments on a representative Wikipedia
+corpus, comparing approximate and exact results at fixed top-K
+values under repeated measurements.
 
 ## 7. Verification and maintenance checklist
 

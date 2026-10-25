@@ -14,6 +14,7 @@ from wikirag.config import (
     load_settings,
 )
 from wikirag.db.connection import get_connection
+from wikirag.db.queries import build_hybrid_search_query
 from wikirag.db.repository import WikiRepository
 from wikirag.db.schema import init_schema
 from wikirag.errors import (
@@ -1125,3 +1126,235 @@ def test_hybrid_search_individual_filters(
 
         # Every returned hit must preserve the shared retrieval contract.
         assert all(hit.score == pytest.approx(1.0 - hit.distance) for hit in hits)
+
+
+def test_exact_search_returns_ranked_hits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact cosine ranking and top-K against MariaDB.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        hits = repo.search_chunks_exact(query_vector, top_k=2)
+
+        assert len(hits) == 2
+        assert [hit.chunk_index for hit in hits] == [0, 1]
+        assert hits[0].article_id == article.article_id
+        assert hits[0].article_title == article.title
+        assert hits[0].distance == pytest.approx(0.0, abs=1e-5)
+        assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+        assert hits[1].distance == pytest.approx(1.0, abs=1e-5)
+
+        limited = repo.search_chunks_exact(query_vector, top_k=1)
+
+        assert len(limited) == 1
+        assert limited[0].chunk_index == 0
+
+
+def test_exact_search_supports_hybrid_filters(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact search applies category filtering before top-K.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Cells contain genetic material.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(physics, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        hits = repo.search_chunks_exact(
+            query_vector,
+            top_k=1,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        assert len(hits) == 1
+        assert hits[0].article_id == biology.article_id
+        assert hits[0].distance == pytest.approx(0.2, abs=1e-5)
+
+
+def test_exact_search_rejects_invalid_inputs(
+    test_db_config: DbConfig,
+) -> None:
+    """Reject malformed exact-search arguments before querying MariaDB.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks_exact((1.0,))
+
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks_exact((0.0,) * EMBEDDING_DIM)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=0)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=101)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=True)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(
+                query_vector,
+                filters=SearchFilters(max_distance=float("nan")),
+            )
+
+
+def test_exact_search_plan_excludes_vector_index(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact search does not select the HNSW vector index.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                article,
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    query_vector = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+
+    statement, params = build_hybrid_search_query(
+        SearchFilters(),
+        vector_json=json.dumps(query_vector),
+        top_k=2,
+    )
+
+    # Exact search must explicitly exclude the vector index.
+    assert "IGNORE INDEX (embedding)" in statement
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute("EXPLAIN " + statement, params)
+        plan = cursor.fetchall()
+
+    assert plan
+
+    # No execution-plan step may select the HNSW embedding index.
+    assert all(row["key"] != "embedding" for row in plan)
+
+
+def test_set_ef_search_updates_current_session(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify supported HNSW settings persist on one connection.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    with WikiRepository(test_db_config) as repo:
+        for value in (1, 40, 10_000):
+            repo.set_ef_search(value)
+
+            rows = repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+
+            assert int(rows[0]["value"]) == value
+
+
+def test_set_ef_search_does_not_change_other_sessions(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify HNSW tuning does not change other connections or globals.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    with (
+        WikiRepository(test_db_config) as first,
+        WikiRepository(test_db_config) as second,
+    ):
+        second_before = int(
+            second._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"]
+        )
+
+        global_before = int(
+            first._fetch_all("SELECT @@GLOBAL.mhnsw_ef_search AS value")[0]["value"]
+        )
+
+        # Choose a different value to make session isolation observable.
+        new_value = 43 if second_before != 43 else 47
+
+        first.set_ef_search(new_value)
+
+        first_value = first._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+        second_value = second._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+        global_value = first._fetch_all("SELECT @@GLOBAL.mhnsw_ef_search AS value")
+
+        assert int(first_value[0]["value"]) == new_value
+        assert int(second_value[0]["value"]) == second_before
+        assert int(global_value[0]["value"]) == global_before
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    (
+        0,
+        -3,
+        10_001,
+        True,
+        20.0,
+        "20",
+        None,
+        float("nan"),
+    ),
+)
+def test_set_ef_search_rejects_invalid_values(
+    test_db_config: DbConfig,
+    invalid_value: object,
+) -> None:
+    """Reject invalid HNSW settings without changing the session.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        invalid_value: Unsupported parameter value.
+    """
+    with WikiRepository(test_db_config) as repo:
+        before = int(repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"])
+
+        with pytest.raises(ValidationError):
+            repo.set_ef_search(invalid_value)
+
+        after = int(repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"])
+
+        assert after == before

@@ -170,20 +170,66 @@ docker compose exec db mariadb -u wikirag -p wikirag -e "SHOW VARIABLES LIKE 'mh
 
 Do not paste private passwords or replace a missing output with an expected-looking value. The exact MariaDB patch release and live `mhnsw%` variable values must come from the running server.
 
-## 6. MariaDB native-vector spike and planned follow-up
+## 6. MariaDB native-vector verification and planned experiments
 
-The blueprint calls for recording **measured** answers to four spike questions. The current evidence supports creation and use of the vector column/index and successful storage; it does **not yet establish** the following findings:
+### 6.1 Verified MariaDB configuration
 
-| Spike question | Present evidence | Next verification |
+The following configuration was inspected directly on 25 October 2026 using the running Docker MariaDB instance.
+
+| Setting | Verified value |
+| --- | --- |
+| MariaDB version | `11.8.9-MariaDB-ubu2404` |
+| Vector column | `VECTOR(384)` |
+| Index type | Native MariaDB VECTOR/HNSW |
+| Index distance | `cosine` |
+| Index M parameter | `16` |
+| `mhnsw_default_distance` | `euclidean` |
+| `mhnsw_default_m` | `6` |
+| `mhnsw_ef_search` | `20` |
+| `mhnsw_max_cache_size` | `16777216` bytes (16 MiB) |
+
+The values were verified using:
+
+```sql
+SELECT VERSION();
+SHOW VARIABLES LIKE 'mhnsw%';
+SHOW CREATE TABLE chunks\G
+```
+
+The actual `chunks` table contains:
+
+```sql
+embedding VECTOR(384) NOT NULL
+```
+
+Its index is reported by MariaDB as:
+
+```sql
+VECTOR KEY `embedding` (`embedding`) `M`='16' `DISTANCE`='cosine'
+```
+
+The server defaults of `M=6` and Euclidean distance do not determine the configuration of this index because our schema explicitly specifies `M=16` and cosine distance.
+
+The index was successfully created and verified on MariaDB 11.8.9. Integration tests also confirmed native vector insertion using `VEC_FromText` and round-trip retrieval using `VEC_ToText`.
+
+These observations verify the schema and vector storage. They do not establish the performance or accuracy of the HNSW search index.
+
+### 6.2 Experiments still required
+
+| Experiment | Current status | Planned verification |
 | --- | --- | --- |
-| Do SQL topic/category filters and joins affect HNSW top-K completeness? | Not measured | Run `EXPLAIN` and compare counts/rankings of Q1–Q3 under selective filters on populated Wikipedia chunks. |
-| How do we reliably force an exact cosine scan for evaluation? | Not measured | Test no-index or index-defeating query shapes and verify plans with `EXPLAIN`. |
-| What `mhnsw%` variable values does the actual MariaDB server use? | Command prepared; values not captured in this document | Record `SHOW VARIABLES LIKE 'mhnsw%'` output, server version and date. |
-| Can FULLTEXT coexist with the vector index? | Not tested | Optional keyword-baseline experiment; do not block mandatory vector/hybrid search on it. |
+| Hybrid SQL filtering with HNSW | Not measured | Execute semantic search with relational predicates and inspect `EXPLAIN` plans |
+| HNSW top-K under selective filters | Not measured | Compare eligible result counts under increasing filter selectivity |
+| Exact cosine search baseline | Not implemented | Implement `search_chunks_exact()` and verify that its query plan avoids HNSW |
+| HNSW vs. exact recall and latency | Not measured | Compare results with repeated runs on the same Wikipedia corpus |
+| Transaction consistency | Ingestion rollback tested; search visibility not measured | Demonstrate consistent vector and metadata visibility during transactions |
+| FULLTEXT compatibility | Not tested; optional | Investigate only after mandatory native vector and hybrid search are complete |
 
-The upcoming `feature/database-search` deliverable must implement `search_chunks`, `search_chunks_exact`, and `set_ef_search`, test all eight `SearchFilters` fields and SQL joins, and provide `sql/002_example_queries.sql` (Q1–Q6). In particular, HNSW top-K with selective SQL predicates can return too few eligible rows; the public repository contract requires `min(top_k, eligible_matching_chunks)` matches unless `max_distance` removes them. The implementation and measurements must prove how this is handled (for example, over-fetching or falling back to exact ranking).
+These tasks belong primarily to `feature/database-search` and subsequent database experiments.
 
-Only after running the relevant experiments should this section contain actual `EXPLAIN` plans, recall, latency, selectivity counts, or claims that one configuration outperforms another. The official evaluation requires grounded Wikipedia queries, recall and latency—not a qualitative assertion that search is “good.”
+The official assignment requires semantic retrieval using `VEC_DISTANCE_COSINE`, relational SQL constraints in the same statement, and measured recall and latency over a real Wikipedia corpus.
+
+No search performance, recall or latency conclusions are claimed at this stage.
 
 ## 7. Verification and maintenance checklist
 

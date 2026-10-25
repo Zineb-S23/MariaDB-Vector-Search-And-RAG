@@ -197,3 +197,44 @@ DELETE_ARTICLE_BY_ID = """
 DELETE FROM articles
 WHERE article_id = %s
 """
+
+
+# Rank Wikipedia chunks using MariaDB's native cosine vector distance.
+
+# Rank chunks with the native vector index before joining article metadata.
+SEARCH_CHUNKS_SEMANTIC = """
+SELECT
+    ranked.chunk_id,
+    ranked.article_id,
+    a.title AS article_title,
+    a.url AS article_url,
+    ranked.chunk_index,
+    ranked.section_title,
+    ranked.text,
+    ranked.distance
+FROM (
+    SELECT
+        c.chunk_id,
+        c.article_id,
+        c.chunk_index,
+        c.section_title,
+        c.text,
+        VEC_DISTANCE_COSINE(
+            c.embedding,
+            VEC_FromText(%s)
+        ) AS distance
+    FROM chunks AS c
+    ORDER BY VEC_DISTANCE_COSINE(
+        c.embedding,
+        VEC_FromText(%s)
+    ) ASC
+    LIMIT %s
+) AS ranked
+JOIN articles AS a
+    ON a.article_id = ranked.article_id
+ORDER BY
+    ranked.distance ASC,
+    ranked.article_id ASC,
+    ranked.chunk_index ASC,
+    ranked.chunk_id ASC
+"""

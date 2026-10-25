@@ -41,6 +41,7 @@ from wikirag.db.queries import (
     LIST_CATEGORIES,
     LIST_TOPICS,
     RESOLVE_LINK_TARGETS,
+    SEARCH_CHUNKS_SEMANTIC,
     UPDATE_ARTICLE,
     UPSERT_CATEGORY,
 )
@@ -776,6 +777,49 @@ class WikiRepository:
             cursor.execute(DELETE_ARTICLE_BY_ID, (article_id,))
             return cursor.rowcount > 0
 
+    @staticmethod
+    def _serialize_search_vector(query_embedding: Sequence[float]) -> str:
+        """Validate a query embedding and serialize it for MariaDB.
+
+        The serialized JSON vector is passed to VEC_FromText in SQL.
+
+        Args:
+            query_embedding: Numeric query embedding containing 384 values.
+
+        Returns:
+            str: JSON array containing finite float32-compatible values.
+
+        Raises:
+            EmbeddingDimensionError: If the query has incorrect dimensions,
+                non-numeric values, non-finite values, or zero magnitude.
+        """
+        if isinstance(query_embedding, (str, bytes)):
+            raise EmbeddingDimensionError("Query embedding must be numeric")
+
+        try:
+            values = tuple(float(value) for value in query_embedding)
+        except (TypeError, ValueError, OverflowError):
+            raise EmbeddingDimensionError("Query embedding must contain numbers") from None
+
+        if len(values) != EMBEDDING_DIM:
+            raise EmbeddingDimensionError(f"Expected {EMBEDDING_DIM} dimensions, got {len(values)}")
+
+        if not all(math.isfinite(value) for value in values):
+            raise EmbeddingDimensionError("Query embedding contains non-finite values")
+
+        try:
+            # MariaDB VECTOR values are stored as 32-bit floating-point numbers.
+            values32 = [struct.unpack("<f", struct.pack("<f", value))[0] for value in values]
+        except (OverflowError, struct.error):
+            raise EmbeddingDimensionError(
+                "Query embedding contains values outside float32 range"
+            ) from None
+
+        if not any(value != 0.0 for value in values32):
+            raise EmbeddingDimensionError("Query embedding cannot be a zero vector")
+
+        return json.dumps(values32, allow_nan=False)
+
     def search_chunks(
         self,
         query_embedding: Sequence[float],
@@ -783,23 +827,77 @@ class WikiRepository:
         top_k: int = 5,
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
-        """Search stored chunks using native MariaDB vector similarity.
+        """Retrieve the nearest stored chunks using MariaDB vector search.
 
-        This method is reserved for the database-search implementation.
-        No semantic or hybrid retrieval is performed by this stub.
+        Uses native VEC_DISTANCE_COSINE to rank chunks by similarity.
+        Hybrid relational filtering will be added in a later milestone.
 
         Args:
-            query_embedding: Query vector with 384 dimensions.
-            top_k: Maximum number of matching chunks to return.
-            filters: Optional relational search constraints.
+            query_embedding: Numeric query embedding containing 384 values.
+            top_k: Maximum number of results, between 1 and 100.
+            filters: Optional search constraints. Only empty filters
+                are supported in this initial implementation.
 
         Returns:
-            list[SearchHit]: Ranked matching chunks when implemented.
+            list[SearchHit]: Ranked chunks with article metadata,
+                cosine distance, and similarity score.
 
         Raises:
-            NotImplementedError: Native vector search is not yet implemented.
+            ValidationError: If top_k or filters are invalid.
+            EmbeddingDimensionError: If the query embedding is invalid.
+            NotImplementedError: If active hybrid filters are supplied.
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If the SQL query fails.
         """
-        raise NotImplementedError("search_chunks will be implemented in feature/database-search")
+        self._check_open()
+
+        if type(top_k) is not int or not 1 <= top_k <= 100:
+            raise ValidationError("top_k must be an integer between 1 and 100")
+
+        if filters is not None and not isinstance(filters, SearchFilters):
+            raise ValidationError("filters must be SearchFilters or None")
+
+        if (
+            filters is not None
+            and filters.max_distance is not None
+            and (not math.isfinite(filters.max_distance) or not 0.0 <= filters.max_distance <= 2.0)
+        ):
+            raise ValidationError("max_distance must be between 0 and 2")
+
+        # Never silently ignore requested hybrid filters.
+        if filters is not None and not filters.is_empty():
+            raise NotImplementedError(
+                "Hybrid SQL filtering will be implemented in the next milestone"
+            )
+
+        vector_json = self._serialize_search_vector(query_embedding)
+
+        # Both distance expressions use the same query embedding.
+        rows = self._fetch_all(
+            SEARCH_CHUNKS_SEMANTIC,
+            (vector_json, vector_json, top_k),
+        )
+
+        hits: list[SearchHit] = []
+
+        for row in rows:
+            distance = float(row["distance"])
+
+            hits.append(
+                SearchHit(
+                    chunk_id=int(row["chunk_id"]),
+                    article_id=int(row["article_id"]),
+                    article_title=row["article_title"],
+                    article_url=row["article_url"],
+                    chunk_index=int(row["chunk_index"]),
+                    section_title=row["section_title"],
+                    text=row["text"],
+                    distance=distance,
+                    score=1.0 - distance,
+                )
+            )
+
+        return hits
 
     def search_chunks_exact(
         self,

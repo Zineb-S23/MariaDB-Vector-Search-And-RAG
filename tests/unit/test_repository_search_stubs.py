@@ -31,7 +31,6 @@ def test_search_method_signatures_match_fake(method_name: str) -> None:
 @pytest.mark.parametrize(
     ("method_name", "arguments"),
     (
-        ("search_chunks", ((1.0,),)),
         ("search_chunks_exact", ((1.0,),)),
         ("set_ef_search", (20,)),
     ),

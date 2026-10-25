@@ -23,7 +23,7 @@ from wikirag.errors import (
     SchemaMismatchError,
     ValidationError,
 )
-from wikirag.models import ArticleRecord, ChunkRecord
+from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 
 
 @pytest.fixture
@@ -810,3 +810,85 @@ def test_delete_source_removes_outgoing_links(
         row = cursor.fetchone()
 
     assert row["total"] == 0
+
+
+def test_semantic_search_returns_ranked_hits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify MariaDB returns correctly ranked native vector results.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+    query_embedding = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        hits = repo.search_chunks(query_embedding, top_k=2)
+
+        assert len(hits) == 2
+        assert [hit.chunk_index for hit in hits] == [0, 1]
+
+        assert hits[0].article_id == article.article_id
+        assert hits[0].article_title == article.title
+        assert hits[0].article_url == article.url
+        assert hits[0].text == "Physics explains motion."
+
+        assert hits[0].distance == pytest.approx(0.0, abs=1e-5)
+        assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+
+        assert hits[1].distance == pytest.approx(1.0, abs=1e-5)
+
+        limited = repo.search_chunks(query_embedding, top_k=1)
+
+        assert len(limited) == 1
+        assert limited[0].chunk_index == 0
+
+
+def test_semantic_search_returns_empty_list(
+    test_db_config: DbConfig,
+) -> None:
+    """Return no matches when the database contains no chunks.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_embedding = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.search_chunks(query_embedding) == []
+
+
+def test_semantic_search_rejects_invalid_inputs(
+    test_db_config: DbConfig,
+) -> None:
+    """Reject invalid query vectors, limits, and unsupported filters.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    valid_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks((1.0,))
+
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks((0.0,) * EMBEDDING_DIM)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=0)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=101)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=True)
+
+        with pytest.raises(NotImplementedError, match="Hybrid SQL"):
+            repo.search_chunks(
+                valid_vector,
+                filters=SearchFilters(topics=("physics",)),
+            )

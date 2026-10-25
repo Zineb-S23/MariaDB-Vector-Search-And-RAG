@@ -8,7 +8,14 @@
 
 The official Area 4 task is not merely to store embeddings. It asks us to query a real Wikipedia corpus using MariaDB 11.8's native `VECTOR` column, HNSW index and `VEC_DISTANCE_COSINE`, while applying relational conditions (such as category, article length, revision date and links) **in the same SQL statement** as semantic ranking. MariaDB also holds article metadata and embeddings in one transactional InnoDB database, avoiding synchronization with an external vector store.
 
-**Current status:** Real database storage, retrieval of records, atomic ingestion, relationships and deletion have integration-test coverage. Semantic ranking with `VEC_DISTANCE_COSINE`, hybrid SQL filtering and recall/latency benchmarks are **planned for `feature/database-search` and are not claimed as completed here**. The blueprint v0.4 branch plan separates these deliverables; an older M1 description groups them together.
+**Current status:** Real database storage, atomic ingestion, relationships,
+deletion, and unfiltered semantic retrieval using `VEC_DISTANCE_COSINE`
+have integration-test coverage. An initial `EXPLAIN` check showed that
+the rank-first, join-second query selects the native VECTOR index,
+although the test database was empty during this check. Hybrid SQL
+filtering, exact-search evaluation, and recall/latency experiments
+remain planned for subsequent milestones in `feature/database-search`.
+
 
 ## 2. Environment and reproducibility
 
@@ -151,7 +158,9 @@ The following results were reported from the developer's local WSL/Docker enviro
 - Real insertion tests passed using `VEC_FromText` and verified native vector round-tripping with `VEC_ToText`.
 - Real integration tests passed for model metadata, insert/skip/update, category/link persistence, read operations, link resolution/deletion, invalid vector rejection and transactional rollback.
 - `make setup-test-db` succeeded and printed the separate `wikirag_test` database.
-- Latest reported local suite: **165 passed** (141 unit tests and 24 MariaDB integration tests); Ruff lint and format checks passed, with `uv lock --check` succeeding.
+- Latest reported local suite: **201 passed** (167 unit tests and
+  34 integration-marked tests); Ruff lint and formatting checks passed.
+
 
 These are **local** observations. They are not a claim that CI has run on the GitHub branch, that a real Wikipedia corpus has been ingested, or that native vector ranking and hybrid-query performance have been demonstrated. The separate GitHub Actions MariaDB job must be verified on a pushed PR.
 
@@ -214,7 +223,33 @@ The index was successfully created and verified on MariaDB 11.8.9. Integration t
 
 These observations verify the schema and vector storage. They do not establish the performance or accuracy of the HNSW search index.
 
-### 6.2 Experiments still required
+
+### 6.2 Initial semantic search execution-plan verification
+
+During semantic-search development, three query structures were
+examined using `EXPLAIN` on MariaDB 11.8.9:
+
+1. **Minimal vector search:** MariaDB selected the native `embedding`
+   VECTOR index (`type=index`, `key=embedding`).
+2. **Vector search with an article join:** The original query used
+   a full scan of `chunks` (`type=ALL`, `key=NULL`) and filesort.
+3. **Rank-first, join-second search:** A derived-table query ranked
+   chunks before joining article metadata. The inner query selected
+   the native `embedding` VECTOR index.
+
+The third structure was selected for the initial `search_chunks()`
+implementation because it preserves index-eligible nearest-neighbor
+ranking while retrieving article titles and URLs.
+
+**Limitation:** The test database contained zero chunks during these
+EXPLAIN comparisons. The results demonstrate optimizer index
+selection, not actual HNSW performance, recall, or latency on a
+populated Wikipedia corpus.
+
+Index usage and retrieval performance must be reevaluated using
+a representative Wikipedia corpus during the database experiments.
+
+### 6.3 Experiments still required
 
 | Experiment | Current status | Planned verification |
 | --- | --- | --- |

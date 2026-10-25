@@ -44,6 +44,7 @@ from wikirag.db.queries import (
     SEARCH_CHUNKS_SEMANTIC,
     UPDATE_ARTICLE,
     UPSERT_CATEGORY,
+    build_hybrid_search_query,
 )
 from wikirag.errors import (
     DatabaseConnectionError,
@@ -827,28 +828,28 @@ class WikiRepository:
         top_k: int = 5,
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
-        """Retrieve the nearest stored chunks using MariaDB vector search.
+        """Retrieve ranked chunks using MariaDB native cosine search.
 
-        Uses native VEC_DISTANCE_COSINE to rank chunks by similarity.
-        Hybrid relational filtering will be added in a later milestone.
+        Unfiltered searches use the HNSW-eligible semantic query.
+        Filtered searches apply relational SQL constraints before
+        exact cosine ranking to avoid selective-filter under-fill.
 
         Args:
             query_embedding: Numeric query embedding containing 384 values.
             top_k: Maximum number of results, between 1 and 100.
-            filters: Optional search constraints. Only empty filters
-                are supported in this initial implementation.
+            filters: Optional relational and distance constraints.
 
         Returns:
             list[SearchHit]: Ranked chunks with article metadata,
                 cosine distance, and similarity score.
 
         Raises:
-            ValidationError: If top_k or filters are invalid.
+            ValidationError: If search parameters are invalid.
             EmbeddingDimensionError: If the query embedding is invalid.
-            NotImplementedError: If active hybrid filters are supplied.
             DatabaseConnectionError: If MariaDB is unavailable.
             DatabaseError: If the SQL query fails.
         """
+
         self._check_open()
 
         if type(top_k) is not int or not 1 <= top_k <= 100:
@@ -857,26 +858,31 @@ class WikiRepository:
         if filters is not None and not isinstance(filters, SearchFilters):
             raise ValidationError("filters must be SearchFilters or None")
 
-        if (
-            filters is not None
-            and filters.max_distance is not None
-            and (not math.isfinite(filters.max_distance) or not 0.0 <= filters.max_distance <= 2.0)
-        ):
-            raise ValidationError("max_distance must be between 0 and 2")
+        if filters is not None and filters.max_distance is not None:
+            threshold = filters.max_distance
 
-        # Never silently ignore requested hybrid filters.
-        if filters is not None and not filters.is_empty():
-            raise NotImplementedError(
-                "Hybrid SQL filtering will be implemented in the next milestone"
-            )
+            if (
+                type(threshold) not in (int, float)
+                or not math.isfinite(threshold)
+                or not 0.0 <= threshold <= 2.0
+            ):
+                raise ValidationError("max_distance must be between 0 and 2")
 
         vector_json = self._serialize_search_vector(query_embedding)
 
-        # Both distance expressions use the same query embedding.
-        rows = self._fetch_all(
-            SEARCH_CHUNKS_SEMANTIC,
-            (vector_json, vector_json, top_k),
-        )
+        if filters is not None and not filters.is_empty():
+            # Filter eligible articles before ranking to avoid top-K under-fill.
+            statement, params = build_hybrid_search_query(
+                filters,
+                vector_json=vector_json,
+                top_k=top_k,
+            )
+        else:
+            # Preserve the HNSW-eligible query for unfiltered searches.
+            statement = SEARCH_CHUNKS_SEMANTIC
+            params = (vector_json, vector_json, top_k)
+
+        rows = self._fetch_all(statement, params)
 
         hits: list[SearchHit] = []
 

@@ -8,13 +8,21 @@
 
 The official Area 4 task is not merely to store embeddings. It asks us to query a real Wikipedia corpus using MariaDB 11.8's native `VECTOR` column, HNSW index and `VEC_DISTANCE_COSINE`, while applying relational conditions (such as category, article length, revision date and links) **in the same SQL statement** as semantic ranking. MariaDB also holds article metadata and embeddings in one transactional InnoDB database, avoiding synchronization with an external vector store.
 
-**Current status:** Real database storage, atomic ingestion, relationships,
-deletion, and unfiltered semantic retrieval using `VEC_DISTANCE_COSINE`
-have integration-test coverage. An initial `EXPLAIN` check showed that
-the rank-first, join-second query selects the native VECTOR index,
-although the test database was empty during this check. Hybrid SQL
-filtering, exact-search evaluation, and recall/latency experiments
-remain planned for subsequent milestones in `feature/database-search`.
+
+**Current status:** Real database storage, atomic ingestion,
+relationships, deletion, native semantic retrieval, and hybrid SQL
+filtering have integration-test coverage.
+
+Unfiltered searches use an HNSW-index-eligible query with
+`VEC_DISTANCE_COSINE`. Filtered searches apply relational SQL
+constraints and exact cosine ranking in one SQL statement, avoiding
+under-filled top-K results caused by filtering only after an HNSW
+search.
+
+The fake and MariaDB repositories have passed the same hybrid-filter
+parity tests. The exact-search evaluation API, HNSW parameter tuning,
+and recall/latency benchmarks remain planned.
+
 
 
 ## 2. Environment and reproducibility
@@ -158,8 +166,12 @@ The following results were reported from the developer's local WSL/Docker enviro
 - Real insertion tests passed using `VEC_FromText` and verified native vector round-tripping with `VEC_ToText`.
 - Real integration tests passed for model metadata, insert/skip/update, category/link persistence, read operations, link resolution/deletion, invalid vector rejection and transactional rollback.
 - `make setup-test-db` succeeded and printed the separate `wikirag_test` database.
-- Latest reported local suite: **201 passed** (167 unit tests and
-  34 integration-marked tests); Ruff lint and formatting checks passed.
+- 237 passed (169 unit tests and 68 integration-marked tests)
+- Real MariaDB integration tests verified topic, category, article-ID,
+  article-length, revision-date, link, and distance filters. Tests
+  also verified filtering before top-K and parity with the
+  in-memory repository.
+
 
 
 These are **local** observations. They are not a claim that CI has run on the GitHub branch, that a real Wikipedia corpus has been ingested, or that native vector ranking and hybrid-query performance have been demonstrated. The separate GitHub Actions MariaDB job must be verified on a pushed PR.
@@ -265,6 +277,55 @@ These tasks belong primarily to `feature/database-search` and subsequent databas
 The official assignment requires semantic retrieval using `VEC_DISTANCE_COSINE`, relational SQL constraints in the same statement, and measured recall and latency over a real Wikipedia corpus.
 
 No search performance, recall or latency conclusions are claimed at this stage.
+
+
+### 6.4 Hybrid SQL filtering implementation
+
+Milestone 2 implements hybrid retrieval through
+`WikiRepository.search_chunks()` using MariaDB-native
+`VEC_DISTANCE_COSINE`.
+
+Two query paths are supported:
+
+1. **Unfiltered semantic search:** Uses the rank-first,
+   join-second SQL query designed to allow native HNSW index
+   selection before retrieving article metadata.
+2. **Filtered hybrid search:** Uses a dynamically assembled,
+   parameterized SQL statement. Article metadata, category,
+   link, and distance constraints are evaluated together with
+   exact cosine-distance ranking. The query uses
+   `IGNORE INDEX (embedding)` to exclude the vector index
+   from this initial filtered-search implementation.
+
+Supported filters are:
+
+- Corpus topics
+- Wikipedia categories
+- Included article IDs
+- Excluded article IDs
+- Minimum article length (strict greater-than)
+- Earliest revision timestamp
+- Links originating from another article
+- Maximum cosine distance
+
+Conditions across filter fields use AND semantics. Multiple
+values within a topic, category, or included-ID filter use
+OR semantics. SQL values are passed through bound parameters.
+
+**Verified behavior:** Local tests cover individual filters,
+combined constraints, case-insensitive topic/category matching,
+selective-filter top-K behavior, and fake-versus-MariaDB
+repository parity.
+
+The latest reported test suite passed 237 tests:
+169 unit tests and 68 integration tests.
+
+**Limitations:** Filtered searches currently use exact ranking,
+not an indexed hybrid-search optimization. Performance and HNSW
+recall have not been benchmarked on a representative Wikipedia
+corpus. Runtime validation of malformed individual filter-field
+contents is not yet exhaustive. The public
+`search_chunks_exact()` evaluation method is still pending.
 
 ## 7. Verification and maintenance checklist
 

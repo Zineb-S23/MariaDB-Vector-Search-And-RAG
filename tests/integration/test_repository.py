@@ -887,8 +887,241 @@ def test_semantic_search_rejects_invalid_inputs(
         with pytest.raises(ValidationError):
             repo.search_chunks(valid_vector, top_k=True)
 
-        with pytest.raises(NotImplementedError, match="Hybrid SQL"):
+
+def test_hybrid_search_filters_before_top_k(
+    test_db_config: DbConfig,
+) -> None:
+    """Return eligible chunks even when closer chunks fail a filter.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Cells contain genetic material.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(physics, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        # The closest unfiltered result belongs to Physics.
+        unfiltered = repo.search_chunks(query_vector, top_k=1)
+
+        assert len(unfiltered) == 1
+        assert unfiltered[0].article_id == physics.article_id
+
+        # Biology must still be returned, despite being farther away.
+        filtered = repo.search_chunks(
+            query_vector,
+            top_k=1,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        assert len(filtered) == 1
+        assert filtered[0].article_id == biology.article_id
+        assert filtered[0].text == "Cells contain genetic material."
+        assert filtered[0].distance == pytest.approx(0.2, abs=1e-5)
+
+
+def test_hybrid_search_combines_relational_filters(
+    test_db_config: DbConfig,
+) -> None:
+    """Apply metadata, category, link, and distance filters together.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = replace(
+        _example_article(),
+        linked_titles=("Test Biology Article",),
+    )
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        length_chars=150,
+        revised_at=datetime(2026, 4, 1),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Biology studies living organisms.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        assert repo.resolve_links() == 1
+
+        filters = SearchFilters(
+            topics=("BIOLOGY",),
+            categories=("biology",),
+            article_ids=(990002,),
+            exclude_article_ids=(990001,),
+            min_length_chars=100,
+            edited_since=datetime(2026, 2, 1),
+            linked_from_article_id=990001,
+            max_distance=0.3,
+        )
+
+        hits = repo.search_chunks(
+            query_vector,
+            top_k=5,
+            filters=filters,
+        )
+
+        assert len(hits) == 1
+        assert hits[0].article_id == biology.article_id
+        assert hits[0].distance == pytest.approx(0.2, abs=1e-5)
+
+        # A stricter distance threshold excludes the same result.
+        stricter = replace(filters, max_distance=0.1)
+
+        assert (
             repo.search_chunks(
-                valid_vector,
-                filters=SearchFilters(topics=("physics",)),
+                query_vector,
+                filters=stricter,
             )
+            == []
+        )
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected_article_ids"),
+    (
+        pytest.param(
+            SearchFilters(topics=("BIOLOGY",)),
+            [990002],
+            id="topic-case-insensitive",
+        ),
+        pytest.param(
+            SearchFilters(categories=("biology",)),
+            [990002],
+            id="category-case-insensitive",
+        ),
+        pytest.param(
+            SearchFilters(article_ids=(990002,)),
+            [990002],
+            id="include-article",
+        ),
+        pytest.param(
+            SearchFilters(exclude_article_ids=(990001,)),
+            [990002],
+            id="exclude-article",
+        ),
+        pytest.param(
+            SearchFilters(min_length_chars=100),
+            [990002],
+            id="minimum-length",
+        ),
+        pytest.param(
+            SearchFilters(edited_since=datetime(2026, 2, 1)),
+            [990002],
+            id="revision-date",
+        ),
+        pytest.param(
+            SearchFilters(linked_from_article_id=990001),
+            [990002],
+            id="linked-from-article",
+        ),
+        pytest.param(
+            SearchFilters(max_distance=0.3),
+            [990001, 990002],
+            id="maximum-distance",
+        ),
+        pytest.param(
+            SearchFilters(min_length_chars=150),
+            [],
+            id="strict-length-boundary",
+        ),
+        pytest.param(
+            SearchFilters(
+                topics=("biology",),
+                categories=("Physics",),
+            ),
+            [],
+            id="conflicting-filters",
+        ),
+    ),
+)
+def test_hybrid_search_individual_filters(
+    test_db_config: DbConfig,
+    filters: SearchFilters,
+    expected_article_ids: list[int],
+) -> None:
+    """Verify each hybrid filter against real MariaDB data.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        filters: Search constraints for the current test case.
+        expected_article_ids: Expected article IDs in ranked order.
+    """
+    source = replace(
+        _example_article(),
+        linked_titles=("Test Biology Article",),
+    )
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        length_chars=150,
+        revised_at=datetime(2026, 4, 1),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Biology studies living organisms.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        assert repo.resolve_links() == 1
+
+        hits = repo.search_chunks(
+            query_vector,
+            top_k=5,
+            filters=filters,
+        )
+
+        assert [hit.article_id for hit in hits] == expected_article_ids
+
+        # Every returned hit must preserve the shared retrieval contract.
+        assert all(hit.score == pytest.approx(1.0 - hit.distance) for hit in hits)

@@ -1,5 +1,9 @@
 """SQL queries used by the MariaDB WikiRAG repository."""
 
+from __future__ import annotations
+
+from wikirag.models import SearchFilters
+
 # Read the existing embedding model configuration.
 GET_EMBEDDING_META = """
 SELECT model_name, embedding_dim
@@ -238,3 +242,133 @@ ORDER BY
     ranked.chunk_index ASC,
     ranked.chunk_id ASC
 """
+
+
+def build_hybrid_search_query(
+    filters: SearchFilters,
+    *,
+    vector_json: str,
+    top_k: int,
+) -> tuple[str, tuple[object, ...]]:
+    """Build an exact cosine search with relational SQL filters.
+
+    Apply all relational constraints before selecting the nearest
+    chunks. The vector index is excluded to avoid selective-filter
+    under-fill in this initial implementation.
+
+    Args:
+        filters: Validated search constraints.
+        vector_json: Validated query embedding serialized as JSON.
+        top_k: Validated maximum number of results.
+
+    Returns:
+        tuple[str, tuple[object, ...]]: Parameterized SQL and values.
+    """
+    conditions: list[str] = []
+    params: list[object] = [vector_json]
+
+    if filters.topics:
+        placeholders = ", ".join("%s" for _ in filters.topics)
+        conditions.append(f"LOWER(a.topic) IN ({placeholders})")
+        params.extend(topic.casefold() for topic in filters.topics)
+
+    if filters.categories:
+        placeholders = ", ".join("%s" for _ in filters.categories)
+        conditions.append(
+            "EXISTS ("
+            "SELECT 1 FROM article_categories AS ac "
+            "JOIN categories AS cat ON cat.category_id = ac.category_id "
+            "WHERE ac.article_id = a.article_id "
+            f"AND LOWER(cat.name) IN ({placeholders})"
+            ")"
+        )
+        params.extend(category.casefold() for category in filters.categories)
+
+    if filters.article_ids:
+        placeholders = ", ".join("%s" for _ in filters.article_ids)
+        conditions.append(f"a.article_id IN ({placeholders})")
+        params.extend(filters.article_ids)
+
+    if filters.exclude_article_ids:
+        placeholders = ", ".join("%s" for _ in filters.exclude_article_ids)
+        conditions.append(f"a.article_id NOT IN ({placeholders})")
+        params.extend(filters.exclude_article_ids)
+
+    if filters.min_length_chars is not None:
+        conditions.append("a.length_chars > %s")
+        params.append(filters.min_length_chars)
+
+    if filters.edited_since is not None:
+        conditions.append("a.revised_at >= %s")
+        params.append(filters.edited_since)
+
+    if filters.linked_from_article_id is not None:
+        conditions.append(
+            "EXISTS ("
+            "SELECT 1 FROM links AS l "
+            "WHERE l.source_article_id = %s "
+            "AND l.target_article_id = a.article_id"
+            ")"
+        )
+        params.append(filters.linked_from_article_id)
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    distance_clause = ""
+    if filters.max_distance is not None:
+        distance_clause = "WHERE ranked.distance <= %s"
+        params.append(filters.max_distance)
+
+    params.append(top_k)
+
+    # Preserve parameterized SQL; f-strings are prohibited by our SQL hygiene test.
+    statement = "\n".join(  # noqa: FLY002
+        (
+            """
+            SELECT
+                ranked.chunk_id,
+                ranked.article_id,
+                ranked.article_title,
+                ranked.article_url,
+                ranked.chunk_index,
+                ranked.section_title,
+                ranked.text,
+                ranked.distance
+            FROM (
+                SELECT
+                    c.chunk_id,
+                    c.article_id,
+                    a.title AS article_title,
+                    a.url AS article_url,
+                    c.chunk_index,
+                    c.section_title,
+                    c.text,
+                    VEC_DISTANCE_COSINE(
+                        c.embedding,
+                        VEC_FromText(%s)
+                    ) AS distance
+                FROM chunks AS c IGNORE INDEX (embedding)
+                JOIN articles AS a
+                    ON a.article_id = c.article_id
+            """,
+            where_clause,
+            """
+            ) AS ranked
+            """,
+            distance_clause,
+            """
+            ORDER BY
+                ranked.distance ASC,
+                ranked.article_id ASC,
+                ranked.chunk_index ASC,
+                ranked.chunk_id ASC
+            LIMIT %s
+            """,
+        )
+    )
+
+    return statement, tuple(params)
+
+    return statement, tuple(params)

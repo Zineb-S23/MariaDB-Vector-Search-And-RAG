@@ -370,3 +370,22 @@ def build_hybrid_search_query(
     )
 
     return statement, tuple(params)
+
+
+# Fixed SQL statements for the two-session transaction experiment.
+TRANSACTION_ISOLATION_SQL = {
+    "REPEATABLE READ": ("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"),
+    "READ COMMITTED": ("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"),
+}
+
+COUNT_VISIBILITY_ARTICLES = """
+SELECT COUNT(*) AS total
+FROM articles
+WHERE article_id = %s
+"""
+
+COUNT_VISIBILITY_CHUNKS = """
+SELECT COUNT(*) AS total
+FROM chunks
+WHERE article_id = %s
+"""

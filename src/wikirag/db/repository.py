@@ -756,26 +756,30 @@ class WikiRepository:
         return [self._article_from_row(row) for row in rows]
 
     def delete_article(self, article_id: int) -> bool:
-        """Delete an article and its dependent database records.
+        """Delete an article and its dependent records atomically.
 
-        The database's foreign keys remove outgoing links,
-        category associations and chunks. Incoming links retain
-        their titles but lose their resolved target ID.
+        Explicitly delete indexed vector chunks before their parent
+        article to avoid relying on cascading deletion for HNSW rows.
 
         Args:
-            article_id: Wikipedia identifier of the article to delete.
+            article_id: Wikipedia article identifier to delete.
 
         Returns:
             bool: True if the article existed, otherwise False.
 
         Raises:
             DatabaseConnectionError: If MariaDB is unavailable.
-            DatabaseError: If deletion fails.
+            DatabaseError: If the database operation fails.
         """
         self._check_open()
 
         with transaction(self._conn) as conn, conn.cursor() as cursor:
+            # Remove VECTOR rows directly before deleting the parent article.
+            cursor.execute(DELETE_ARTICLE_CHUNKS, (article_id,))
+
+            # Existing foreign keys still handle other dependent records.
             cursor.execute(DELETE_ARTICLE_BY_ID, (article_id,))
+
             return cursor.rowcount > 0
 
     @staticmethod

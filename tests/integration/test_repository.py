@@ -18,7 +18,7 @@ from wikirag.config import (
     load_settings,
 )
 from wikirag.db.connection import get_connection
-from wikirag.db.diagnostics import explain_search
+from wikirag.db.diagnostics import demo_transaction_visibility, explain_search
 from wikirag.db.queries import (
     SEARCH_CHUNKS_SEMANTIC,
     build_hybrid_search_query,
@@ -34,6 +34,7 @@ from wikirag.errors import (
 )
 from wikirag.experiments.metric_mismatch import run_metric_mismatch
 from wikirag.experiments.reporting import write_experiment_report
+from wikirag.experiments.transaction_visibility import run_transaction_visibility
 from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 
 
@@ -1866,3 +1867,294 @@ def test_metric_mismatch_runner_returns_experiment_results(
 
     # Verify that serialization preserves the complete experiment.
     assert saved_report == report
+
+
+def test_transaction_visibility_across_isolation_levels(
+    test_db_config: DbConfig,
+    tmp_path: Path,
+) -> None:
+    """Record transaction visibility and detect HNSW index-history misses.
+
+    Run both isolation levels sequentially on the same vector index.
+    Verify transactional correctness while preserving evidence of
+    indexed retrieval discrepancies.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        tmp_path: Temporary directory for the JSON experiment report.
+
+    Returns:
+        None: Passes if all visibility checks succeed, or reports
+            an expected failure when a committed HNSW hit is missing.
+    """
+    report = run_transaction_visibility(config=test_db_config)
+
+    assert report["experiment"] == "transaction_visibility"
+
+    results = report["isolation_levels"]
+
+    assert set(results) == {
+        "REPEATABLE READ",
+        "READ COMMITTED",
+    }
+
+    invisible = {
+        "articles": 0,
+        "chunks": 0,
+        "q1_hits": 0,
+        "exact_hits": 0,
+    }
+
+    visible_storage = {
+        "articles": 1,
+        "chunks": 1,
+        "exact_hits": 1,
+    }
+
+    indexed_search_misses: list[str] = []
+
+    for isolation, states in results.items():
+        # No uncommitted or rolled-back records should be visible.
+        for stage in (
+            "before",
+            "uncommitted",
+            "after_rollback",
+            "before_commit",
+            "after_cleanup",
+        ):
+            assert states[stage] == invisible
+
+        # Storage and exact search must see the committed vector.
+        for stage in (
+            "after_commit",
+            "after_commit_fresh_reader",
+        ):
+            observation = states[stage]
+
+            for field, expected in visible_storage.items():
+                assert observation[field] == expected
+
+            if observation["q1_hits"] != 1:
+                indexed_search_misses.append(f"{isolation}: {stage}")
+
+    # Preserve the complete observations, including any HNSW misses.
+    report["indexed_search_misses"] = indexed_search_misses
+
+    destination = tmp_path / "transaction_visibility.json"
+
+    write_experiment_report(
+        report,
+        output_path=destination,
+    )
+
+    assert json.loads(destination.read_text(encoding="utf-8")) == report
+
+    print("\nCombined transaction visibility observations:")
+    print(json.dumps(report, indent=2))
+
+    assert not indexed_search_misses, "HNSW missed committed vectors: " + ", ".join(
+        indexed_search_misses
+    )
+
+
+def test_transaction_visibility_rejects_application_database(
+    test_db_config: DbConfig,
+) -> None:
+    """Prevent transaction experiments from modifying application data.
+
+    Args:
+        test_db_config: Dedicated MariaDB test configuration.
+    """
+    unsafe_config = replace(
+        test_db_config,
+        database="wikirag_production",
+    )
+
+    with pytest.raises(ValidationError):
+        demo_transaction_visibility(unsafe_config)
+
+
+@pytest.mark.parametrize(
+    "isolation",
+    ("REPEATABLE READ", "READ COMMITTED"),
+)
+def test_transaction_visibility_with_fresh_index(
+    test_db_config: DbConfig,
+    isolation: str,
+) -> None:
+    """Verify each isolation level independently on a fresh schema.
+
+    The test_db_config fixture recreates the dedicated test schema
+    before each parametrized test case.
+
+    Args:
+        test_db_config: Independently initialized MariaDB test database.
+        isolation: Transaction isolation level being verified.
+
+    Returns:
+        None: Passes when relational and vector visibility agree.
+    """
+    report = demo_transaction_visibility(
+        config=test_db_config,
+        isolation_levels=(isolation,),
+    )
+
+    states = report["isolation_levels"][isolation]
+
+    invisible = {
+        "articles": 0,
+        "chunks": 0,
+        "q1_hits": 0,
+        "exact_hits": 0,
+    }
+
+    visible = {
+        "articles": 1,
+        "chunks": 1,
+        "q1_hits": 1,
+        "exact_hits": 1,
+    }
+
+    print(f"\nFresh-schema results for {isolation}:")
+    print(json.dumps(states, indent=2))
+
+    assert states["before"] == invisible
+    assert states["uncommitted"] == invisible
+    assert states["after_rollback"] == invisible
+    assert states["before_commit"] == invisible
+
+    assert states["after_commit"] == visible
+    assert states["after_commit_fresh_reader"] == visible
+
+    assert states["after_cleanup"] == invisible
+
+
+def test_repeated_article_deletion_preserves_hnsw_search(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify committed vectors remain searchable after deletion cycles.
+
+    Args:
+        test_db_config: Dedicated isolated MariaDB test database.
+
+    Returns:
+        None: Passes when indexed and exact searches find each new
+            article after previous articles have been deleted.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    for index in range(10):
+        article_id = 991000 + index
+
+        article = replace(
+            _example_article(),
+            article_id=article_id,
+            title=f"HNSW Deletion Test {index}",
+            url=f"https://example.invalid/hnsw/{index}",
+            fingerprint=f"{index + 1:064x}",
+            linked_titles=(),
+        )
+
+        with WikiRepository(test_db_config) as writer:
+            assert (
+                writer.ingest_article(
+                    article,
+                    _example_chunks()[:1],
+                )
+                == "inserted"
+            )
+
+        # Use a new connection to verify committed search visibility.
+        with WikiRepository(test_db_config) as reader:
+            indexed_hits = reader.search_chunks(
+                query_vector,
+                top_k=5,
+            )
+
+            exact_hits = reader.search_chunks_exact(
+                query_vector,
+                top_k=5,
+            )
+
+            assert [hit.article_id for hit in indexed_hits] == [article_id]
+
+            assert [hit.article_id for hit in exact_hits] == [article_id]
+
+        with WikiRepository(test_db_config) as writer:
+            assert writer.delete_article(article_id) is True
+            assert writer.count_articles() == 0
+            assert writer.count_chunks() == 0
+
+
+def test_repeated_article_updates_preserve_hnsw_search(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify updated embeddings remain searchable across replacement cycles.
+
+    Args:
+        test_db_config: Isolated MariaDB test database configuration.
+
+    Returns:
+        None: Passes when each committed replacement is visible
+            through indexed and exact cosine retrieval.
+    """
+    article = replace(
+        _example_article(),
+        linked_titles=(),
+    )
+
+    for cycle in range(10):
+        # Alternate query directions to verify the current stored vector.
+        first_dimension = 1.0 if cycle % 2 == 0 else 0.0
+        second_dimension = 1.0 - first_dimension
+
+        vector = (
+            first_dimension,
+            second_dimension,
+        ) + (0.0,) * (EMBEDDING_DIM - 2)
+
+        updated_article = replace(
+            article,
+            revision_id=10 + cycle,
+            fingerprint=f"{cycle + 1:064x}",
+        )
+
+        updated_chunk = ChunkRecord(
+            chunk_index=0,
+            text=f"Updated physics chunk version {cycle}",
+            embedding=vector,
+        )
+
+        with WikiRepository(test_db_config) as writer:
+            outcome = writer.ingest_article(
+                updated_article,
+                (updated_chunk,),
+            )
+
+            assert outcome == ("inserted" if cycle == 0 else "updated")
+
+        # Read committed data through an independent connection.
+        with WikiRepository(test_db_config) as reader:
+            assert reader.count_articles() == 1
+            assert reader.count_chunks() == 1
+
+            indexed_hits = reader.search_chunks(
+                vector,
+                top_k=1,
+            )
+
+            exact_hits = reader.search_chunks_exact(
+                vector,
+                top_k=1,
+            )
+
+            assert len(indexed_hits) == 1
+            assert len(exact_hits) == 1
+
+            for hit in (*indexed_hits, *exact_hits):
+                assert hit.article_id == article.article_id
+                assert hit.text == updated_chunk.text
+                assert hit.distance == pytest.approx(
+                    0.0,
+                    abs=1e-5,
+                )

@@ -225,13 +225,13 @@ The examples must be verified again after the real Wikipedia corpus has been ing
 
 ### Test results
 
-The latest reported local test suite passed **278 tests**:
+The latest reported local test suite passed **296 tests**:
 
 | Test suite | Passed |
 | --- | ---: |
-| Unit tests | 183 |
-| Integration tests | 95 |
-| Total | **278** |
+| Unit tests | 191 |
+| Integration tests | 105 |
+| Total | **296** |
 
 Additional checks passed:
 
@@ -394,35 +394,25 @@ A small dataset cannot establish how approximate nearest-neighbor retrieval perf
 
 The plans and performance must be reevaluated using a representative Wikipedia corpus.
 
-### 6.3 Experiments still required
 
-| Experiment | Current status | Planned verification |
-| --- | --- | --- |
-| Indexed hybrid SQL filtering | Not implemented or benchmarked | Investigate HNSW-compatible filtered-query plans and compare with the existing exact-filtered implementation |
-| HNSW top-K under selective filters | Exact filtered search tested; indexed behavior not benchmarked | Compare eligible results under increasing filter selectivity |
-| Exact cosine search baseline | Implemented and integration-tested | Compare exact results against HNSW on the same Wikipedia corpus |
-| HNSW vs. exact recall and latency | Small synthetic comparison passed; real-corpus evaluation pending | Run repeated searches over a fixed labeled question set |
-| HNSW `ef_search` sensitivity | Session tuning implemented; retrieval effects not measured | Compare recall and latency across multiple `ef_search` settings |
-| Vector index parameter comparison | Starting configuration verified; alternatives not measured | Compare supported HNSW configurations under controlled conditions |
-| Transaction consistency | Ingestion rollback tested; concurrent search visibility not measured | Demonstrate consistent visibility of vector and relational metadata during transactions |
-| SQL demonstration verification | Q1-Q5 accepted against empty application database | Verify query results on populated Wikipedia data |
-| FULLTEXT compatibility | Not tested; optional | Investigate only after mandatory native-vector and hybrid-search requirements are satisfied |
+### 6.3 Database depth experiments
 
-The architecture blueprint additionally proposes database diagnostics and depth experiments covering index plans, vector-distance/index-metric mismatch, transactional visibility, and cache-size effects.
+Three database depth experiments have been implemented and
+tested on MariaDB 11.8.9.
 
-The corresponding reusable diagnostics and experiment implementations remain outstanding and may be developed in a separate database-experiments branch or during final integration.
+| Experiment | Verified finding |
+| --- | --- |
+| C — Metric mismatch | Direct cosine ranking selected the HNSW index; Euclidean and wrapped cosine expressions did not in the controlled test. |
+| D — Transaction visibility | Both isolation levels passed; explicit deletion of indexed chunks before their parent resolved the reproduced HNSW visibility failure. |
+| E — Cache size | In the 6,000-vector synthetic benchmark, 16 MiB had the lowest mean latency and 64 MiB had the lowest p95. |
 
-The official Area 4 assignment requires:
+See [Database Depth Experiments](database_experiments.md)
+for methodology, raw evidence, exact settings, reproduction
+commands, regression tests, and limitations.
 
-- A real Wikipedia corpus.
-- MariaDB-native semantic retrieval using `VEC_DISTANCE_COSINE`.
-- Relational SQL constraints combined with semantic retrieval in the same statement.
-- A labeled question set with known relevant source articles.
-- Measured retrieval recall and latency.
-
-The current database implementation supports the required retrieval operations, but the Wikipedia-based evaluation results have not yet been produced.
-
-No real-corpus recall, latency, or performance conclusions are claimed at this stage.
+Real-Wikipedia recall and latency evaluation remains outstanding.
+Experiments on filter selectivity, HNSW search breadth, and
+chunk size are separate planned or teammate-owned work.
 
 ### 6.4 Hybrid SQL filtering implementation
 

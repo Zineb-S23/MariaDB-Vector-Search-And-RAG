@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import Mapping, Sequence
+import json
+import logging
+import time
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +26,20 @@ USER_AGENT = (
 CATEGORY_PREFIX = "Category:"
 REQUEST_TIMEOUT_S = 30.0
 MAX_API_REQUESTS = 20
+SNAPSHOT_FIELDS = (
+    "article_id",
+    "title",
+    "url",
+    "revision_id",
+    "revised_at",
+    "fetched_at",
+    "topic",
+    "categories",
+    "linked_titles",
+    "text",
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_title(title: str) -> str:
@@ -391,3 +408,180 @@ def fetch_article(
 
     fetched_at = datetime.now(UTC).replace(tzinfo=None)
     return parse_article_page(merged, fetched_at=fetched_at, topic=topic)
+
+
+def _article_to_record(article: RawArticle) -> dict[str, Any]:
+    """Convert an article into a JSON-friendly dictionary.
+
+    Args:
+        article: The article to store.
+
+    Returns:
+        A dictionary with every field of the article; times as ``YYYY-MM-DDTHH:MM:SSZ`` text.
+    """
+    return {
+        "article_id": article.article_id,
+        "title": article.title,
+        "url": article.url,
+        "revision_id": article.revision_id,
+        "revised_at": article.revised_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fetched_at": article.fetched_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "topic": article.topic,
+        "categories": list(article.categories),
+        "linked_titles": list(article.linked_titles),
+        "text": article.text,
+    }
+
+
+def _record_to_article(record: object) -> RawArticle:
+    """Rebuild an article from a dictionary read from a snapshot line.
+
+    Args:
+        record: The decoded JSON value of one snapshot line.
+
+    Returns:
+        The validated article.
+
+    Raises:
+        ValidationError: If the record is not an object, lacks a field or holds a bad value.
+    """
+    if not isinstance(record, dict):
+        raise ValidationError("expected a JSON object")
+    missing = [field for field in SNAPSHOT_FIELDS if field not in record]
+    if missing:
+        raise ValidationError(f"missing fields: {', '.join(missing)}")
+    for field in ("title", "url", "text"):
+        value = record[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError(f"{field} must be a non-empty string")
+    for field in ("article_id", "revision_id"):
+        if not _is_positive_int(record[field]):
+            raise ValidationError(f"{field} must be a positive integer")
+    topic = record["topic"]
+    if topic is not None and not isinstance(topic, str):
+        raise ValidationError("topic must be a string or null")
+    for field in ("categories", "linked_titles"):
+        value = record[field]
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValidationError(f"{field} must be a list of strings")
+
+    title = record["title"]
+    return RawArticle(
+        article_id=record["article_id"],
+        title=title,
+        url=record["url"],
+        revision_id=record["revision_id"],
+        revised_at=_parse_timestamp(record["revised_at"], title),
+        text=record["text"],
+        fetched_at=_parse_timestamp(record["fetched_at"], title),
+        topic=topic,
+        categories=tuple(record["categories"]),
+        linked_titles=tuple(record["linked_titles"]),
+    )
+
+
+def _iter_snapshot(path: Path) -> Iterator[RawArticle]:
+    """Yield the articles of a snapshot file one by one.
+
+    Args:
+        path: An existing snapshot file.
+
+    Yields:
+        Each article, in file order.
+
+    Raises:
+        ValidationError: If a line is not valid JSON, holds an invalid article, or the file
+            is not UTF-8.
+    """
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    article = _record_to_article(json.loads(line))
+                except (json.JSONDecodeError, ValidationError) as error:
+                    raise ValidationError(f"Snapshot line {line_number}: {error}") from error
+                yield article
+    except UnicodeDecodeError as error:
+        raise ValidationError(f"Snapshot file {path} is not valid UTF-8: {error}") from error
+
+
+def load_snapshot(path: Path) -> Iterator[RawArticle]:
+    """Read a snapshot file written by ``build_snapshot``.
+
+    The file is checked right away, but the articles are read lazily, so a large snapshot
+    never has to fit into memory at once.
+
+    Args:
+        path: Location of the snapshot file (one JSON article per line).
+
+    Returns:
+        An iterator over the articles in file order.
+
+    Raises:
+        ValidationError: If the file does not exist. Damaged lines raise the same error
+            while the iterator is consumed.
+    """
+    if not path.is_file():
+        raise ValidationError(f"Snapshot file not found: {path}")
+    return _iter_snapshot(path)
+
+
+def build_snapshot(
+    seed_path: Path,
+    out_path: Path,
+    *,
+    delay_s: float = 0.2,
+) -> int:
+    """Download every seed article from Wikipedia and save them as a snapshot.
+
+    Articles that cannot be downloaded are skipped with a warning, and so is a second seed
+    title that leads to an article already saved (for example through a redirect). The file
+    is written to a temporary name first, so an existing snapshot is only replaced when at
+    least one article was downloaded.
+
+    Args:
+        seed_path: Seed CSV file with ``topic,title`` columns.
+        out_path: Snapshot file to write, one JSON article per line.
+        delay_s: Seconds to wait between two requests, to be polite to Wikipedia.
+
+    Returns:
+        The number of articles written.
+
+    Raises:
+        ValidationError: If ``delay_s`` is negative or the seed file is invalid.
+        WikiRagError: If no article at all could be downloaded.
+    """
+    if delay_s < 0:
+        raise ValidationError("delay_s must not be negative")
+    seeds = load_seed_titles(seed_path)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = out_path.with_name(out_path.name + ".tmp")
+    seen_ids: set[int] = set()
+    written = 0
+    try:
+        with requests.Session() as client, temp_path.open("w", encoding="utf-8") as handle:
+            for index, (topic, title) in enumerate(seeds):
+                if index > 0 and delay_s > 0:
+                    time.sleep(delay_s)
+                try:
+                    article = fetch_article(title, topic=topic, session=client)
+                except WikiRagError as error:
+                    logger.warning("Skipping %r: %s", title, error)
+                    continue
+                if article.article_id in seen_ids:
+                    logger.warning("Skipping %r: article already in the snapshot", title)
+                    continue
+                seen_ids.add(article.article_id)
+                # sorted keys keep the file identical when the data is identical
+                line = json.dumps(_article_to_record(article), ensure_ascii=False, sort_keys=True)
+                handle.write(line + "\n")
+                written += 1
+        if written == 0:
+            raise WikiRagError("No articles could be downloaded; snapshot not written")
+        temp_path.replace(out_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return written

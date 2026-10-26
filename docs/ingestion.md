@@ -81,3 +81,55 @@ uv run --extra dev python -m pytest tests/unit -q
 ```
 
 The Wikipedia tests use a fake API and need no internet access.
+
+
+
+## Cleaning
+
+`clean_text` in `src/wikirag/ingestion/cleaning.py` tidies the plain text of an article. The
+same input always gives the same output, which matters because the article fingerprint is
+computed from the cleaned text. If a rule changes, the fingerprints change and the affected
+articles are embedded again.
+
+Rules, applied in this order:
+
+1. Unicode NFC normalization, so that `é` has one representation.
+2. Line endings become `\n`.
+3. Invisible characters are removed: zero-width space, soft hyphen, word joiner and
+   byte-order mark. The zero-width non-joiner is kept, because some languages need it
+   inside words.
+4. Every run of spaces, tabs and non-breaking spaces becomes one space.
+5. Spaces at the start and end of each line are removed.
+6. Three or more line breaks become one blank line, so paragraph breaks survive.
+7. The whole text is stripped.
+
+The wording of the text is never changed. The function raises `ValidationError` if its input
+is not a string.
+
+
+
+## Chunking
+
+`split_into_chunks` in `src/wikirag/ingestion/chunking.py` cuts cleaned text into pieces
+that the embedding model can read. The defaults match the shared contract: at most 1000
+characters per chunk and an overlap of 150 characters. Both values are counted in characters.
+
+How a chunk is cut:
+
+- A chunk is at most `max_chars` long. If the text is longer, the chunk ends at the last
+  paragraph break, line break, sentence end (`. `) or space found in the second half of its
+  window, in that order of preference. If none exists it is cut at `max_chars`.
+- The next chunk starts about `overlap_chars` before the end of the previous one, moved
+  forward to the beginning of a word. A sentence that is cut in half therefore appears whole
+  in one of the two chunks.
+- Text without any whitespace cannot be overlapped cleanly and is cut without overlap.
+- Chunks have no leading or trailing whitespace, and chunk numbers run from 0 without gaps.
+- The same text and settings always give the same chunks. Blank text gives no chunks.
+
+The result is a list of `ChunkDraft` objects (`chunk_index`, `text` and an empty
+`section_title`). The embedding pipeline turns them into shared `ChunkRecord` objects by
+adding the embedding. Invalid settings, such as an overlap that is not smaller than
+`max_chars`, raise `ValidationError`.
+
+The chunk size and overlap are only starting values. The planned experiment compares
+other settings on the same questions before the final values are chosen.

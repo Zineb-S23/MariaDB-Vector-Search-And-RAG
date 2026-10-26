@@ -1,16 +1,28 @@
+"""Wikipedia acquisition helpers: seed titles, article fetching and snapshots."""
+
+from __future__ import annotations
+
 import csv
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from wikirag.errors import ValidationError
+import requests
+
+from wikirag.errors import ValidationError, WikiRagError
 
 SEED_COLUMNS = ("topic", "title")
 WIKIPEDIA_ARTICLE_URL = "https://en.wikipedia.org/wiki/"
+WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
+USER_AGENT = (
+    "WikiRAG-student-project/0.1 (https://github.com/melsayed-eg/MariaDB-Vector-Search-And-RAG)"
+)
 CATEGORY_PREFIX = "Category:"
+REQUEST_TIMEOUT_S = 30.0
+MAX_API_REQUESTS = 20
 
 
 def _normalize_title(title: str) -> str:
@@ -242,3 +254,140 @@ def parse_article_page(
         categories=_collect_titles(page.get("categories"), strip_prefix=CATEGORY_PREFIX),
         linked_titles=_collect_titles(page.get("links")),
     )
+
+
+def _build_query_params(title: str) -> dict[str, str]:
+    """Build the parameters of the first API request for one article.
+
+    Args:
+        title: Normalized article title.
+
+    Returns:
+        Query parameters asking for plain text, revision info, visible categories and links.
+    """
+    return {
+        "action": "query",
+        "format": "json",
+        "formatversion": "2",
+        "titles": title,
+        "redirects": "1",
+        "prop": "extracts|revisions|categories|links",
+        "explaintext": "1",
+        "exsectionformat": "plain",
+        "rvprop": "ids|timestamp",
+        "clshow": "!hidden",
+        "cllimit": "max",
+        "plnamespace": "0",
+        "pllimit": "max",
+    }
+
+
+def _get_json(
+    client: requests.Session, params: Mapping[str, str], timeout_s: float
+) -> dict[str, Any]:
+    """Send one request to the Wikipedia API and return the decoded answer.
+
+    Args:
+        client: HTTP session used to send the request.
+        params: Query parameters of the request.
+        timeout_s: Seconds to wait before giving up.
+
+    Returns:
+        The decoded JSON object.
+
+    Raises:
+        WikiRagError: If the request fails, the server reports an error or the answer is
+            not a JSON object.
+    """
+    try:
+        response = client.get(
+            WIKIPEDIA_API_URL,
+            params=params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=timeout_s,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as error:
+        raise WikiRagError(f"Wikipedia request failed: {error}") from error
+    if not isinstance(payload, dict):
+        raise WikiRagError("Wikipedia returned an unexpected response")
+    if "error" in payload:
+        raise WikiRagError(f"Wikipedia API error: {payload['error']}")
+    return payload
+
+
+def _merge_page(merged: dict[str, Any], page: Mapping[str, Any]) -> None:
+    """Add the fields of one API answer to the article collected so far.
+
+    Args:
+        merged: The article collected from earlier answers; changed in place.
+        page: The page object of the newest answer.
+    """
+    for key, value in page.items():
+        if key in ("categories", "links"):
+            # long lists arrive in several answers, so they are joined
+            merged.setdefault(key, []).extend(value)
+        else:
+            merged.setdefault(key, value)
+
+
+def fetch_article(
+    title: str,
+    *,
+    topic: str | None = None,
+    session: requests.Session | None = None,
+    timeout_s: float = REQUEST_TIMEOUT_S,
+    max_requests: int = MAX_API_REQUESTS,
+) -> RawArticle:
+    """Download one article from English Wikipedia.
+
+    Follows redirects, requests the plain text, the latest revision, visible categories and
+    article links, and keeps asking while Wikipedia says there is more to come.
+
+    Args:
+        title: Article title; underscores and extra spaces are tolerated.
+        topic: Topic label from the seed list, stored on the result.
+        session: HTTP session to reuse; a temporary one is created and closed if omitted.
+        timeout_s: Seconds to wait for each request.
+        max_requests: Most requests allowed for this article, as a safety stop.
+
+    Returns:
+        The downloaded article.
+
+    Raises:
+        ValidationError: If the title is blank, ``max_requests`` is below 1, or the page
+            does not exist or lacks required data.
+        WikiRagError: If Wikipedia cannot be reached, reports an error or keeps asking for
+            more requests than ``max_requests``.
+    """
+    clean_title = _normalize_title(title)
+    if not clean_title:
+        raise ValidationError("Article title must not be empty")
+    if max_requests < 1:
+        raise ValidationError("max_requests must be at least 1")
+
+    client = session if session is not None else requests.Session()
+    merged: dict[str, Any] = {}
+    base_params = _build_query_params(clean_title)
+    params = base_params
+    try:
+        for _ in range(max_requests):
+            payload = _get_json(client, params, timeout_s)
+            pages = payload.get("query", {}).get("pages")
+            if not pages:
+                raise WikiRagError(f"Wikipedia returned no page for {clean_title!r}")
+            _merge_page(merged, pages[0])
+            continuation = payload.get("continue")
+            if not continuation:
+                break
+            # the continue token tells Wikipedia where the last answer stopped
+            params = {**base_params, **continuation}
+        else:
+            raise WikiRagError(f"Too many API requests for {clean_title!r}")
+    finally:
+        if session is None:
+            client.close()
+
+    fetched_at = datetime.now(UTC).replace(tzinfo=None)
+    return parse_article_page(merged, fetched_at=fetched_at, topic=topic)

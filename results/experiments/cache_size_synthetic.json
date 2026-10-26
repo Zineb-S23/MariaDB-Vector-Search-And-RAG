@@ -1,0 +1,4621 @@
+{
+  "cache_sizes_bytes": [
+    1048576,
+    16777216,
+    67108864
+  ],
+  "chunk_count": 6000,
+  "created_at_utc": "2026-10-26T19:06:47.467439+00:00",
+  "database": "wikirag_cache_test",
+  "dataset": "deterministic synthetic random vectors",
+  "dataset_seed": 20261026,
+  "embedding_dimensions": 384,
+  "experiment": "cache_size",
+  "git_commit": "015028c93d067df48358a0ec98a7f1eaff4d4db2",
+  "hardware": {
+    "architecture": "x86_64",
+    "logical_cpus": 12,
+    "system": "Linux"
+  },
+  "notes": "Each cycle recreates the isolated MariaDB service but preserves its database volume. First-observed queries are measured after server restart, not after clearing the operating-system file cache. Synthetic random embeddings do not measure semantic retrieval quality.",
+  "queries_per_cycle": 5,
+  "query_embedder": "FakeEmbedder",
+  "query_ids": [
+    "cache-0",
+    "cache-1",
+    "cache-2",
+    "cache-3",
+    "cache-4"
+  ],
+  "restart_cycles": 5,
+  "settings": {
+    "1048576": {
+      "first_query_after_restart_ms": [
+        7.273762006661855,
+        7.671968996874057,
+        7.115677988622338,
+        7.5955170032102615,
+        8.878676002495922
+      ],
+      "first_query_mean_ms": 7.7071203995728865,
+      "restart_cycles": 5,
+      "runs": [
+        [
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.273762006661855,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.980196012184024,
+              4.532338993158191,
+              4.273183993063867,
+              4.575051003484987,
+              4.6802709985058755
+            ],
+            "warm_mean_ms": 4.608208200079389,
+            "warm_p50_ms": 4.575051003484987,
+            "warm_p95_ms": 4.920211009448394,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2562541388947114
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.074778993730433,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.98314699891489,
+              5.16749000234995,
+              5.202766988077201,
+              5.5730419990140945,
+              5.36523899063468
+            ],
+            "warm_mean_ms": 5.458336995798163,
+            "warm_p50_ms": 5.36523899063468,
+            "warm_p95_ms": 5.901125998934731,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.33434937495975786
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.758051993325353,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.554378003580496,
+              6.222409007023089,
+              17.898177000461146,
+              13.587949011707678,
+              5.054281995398924
+            ],
+            "warm_mean_ms": 9.663439003634267,
+            "warm_p50_ms": 6.222409007023089,
+            "warm_p95_ms": 17.036131402710453,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 5.7702271780701695
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.787171990959905,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.625072004273534,
+              5.066046011052094,
+              5.046289996244013,
+              4.334386991104111,
+              4.864795002504252
+            ],
+            "warm_mean_ms": 4.787318001035601,
+            "warm_p50_ms": 4.864795002504252,
+            "warm_p95_ms": 5.062094808090478,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.30912325488768627
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.166757997358218,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.585860009887256,
+              6.692069990094751,
+              4.965884989360347,
+              5.008605003240518,
+              4.861153996898793
+            ],
+            "warm_mean_ms": 5.422714797896333,
+            "warm_p50_ms": 5.008605003240518,
+            "warm_p95_ms": 6.470827994053252,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.7637751458005412
+          }
+        ],
+        [
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.671968996874057,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.41854600305669,
+              6.403096005669795,
+              5.284279002808034,
+              6.044951995136216,
+              6.743170990375802
+            ],
+            "warm_mean_ms": 5.9788087994093075,
+            "warm_p50_ms": 6.044951995136216,
+            "warm_p95_ms": 6.6751559934346005,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.6254818450723125
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.147615011082962,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.295586001011543,
+              6.591402998310514,
+              5.609895000816323,
+              4.894803001661785,
+              6.444375001592562
+            ],
+            "warm_mean_ms": 5.767212400678545,
+            "warm_p50_ms": 5.609895000816323,
+            "warm_p95_ms": 6.561997398966923,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.7324816915726684
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.278485994902439,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.139796994626522,
+              5.3232780046528205,
+              5.022787998314016,
+              4.964323990861885,
+              26.743604001239873
+            ],
+            "warm_mean_ms": 9.438758197939023,
+            "warm_p50_ms": 5.139796994626522,
+            "warm_p95_ms": 22.459538801922463,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 9.674674247776696
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.309908007504418,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              7.824130007065833,
+              6.688713998300955,
+              6.533719002618454,
+              5.757025995990261,
+              6.785481004044414
+            ],
+            "warm_mean_ms": 6.717814001603983,
+            "warm_p50_ms": 6.688713998300955,
+            "warm_p95_ms": 7.616400206461549,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.7393181483189843
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.806915007065982,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.322899000020698,
+              4.803251009434462,
+              5.731894998461939,
+              6.087786998250522,
+              6.228092999663204
+            ],
+            "warm_mean_ms": 5.634785001166165,
+            "warm_p50_ms": 5.731894998461939,
+            "warm_p95_ms": 6.2000317993806675,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.58210334115463
+          }
+        ],
+        [
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.115677988622338,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              6.844778996310197,
+              4.775441993842833,
+              4.708217005827464,
+              8.56772500264924,
+              5.025147009291686
+            ],
+            "warm_mean_ms": 5.984262001584284,
+            "warm_p50_ms": 5.025147009291686,
+            "warm_p95_ms": 8.223135801381432,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.6899858569553297
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.034185000113212,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.4880149982636794,
+              4.665311993448995,
+              5.641039009788074,
+              5.074581989902072,
+              5.949250000412576
+            ],
+            "warm_mean_ms": 5.363639598363079,
+            "warm_p50_ms": 5.4880149982636794,
+            "warm_p95_ms": 5.887607802287675,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.5016410472993063
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.913815995678306,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.238429992459714,
+              5.6269100023200735,
+              4.93854699016083,
+              5.311339991749264,
+              5.034558998886496
+            ],
+            "warm_mean_ms": 5.229957195115276,
+            "warm_p50_ms": 5.238429992459714,
+            "warm_p95_ms": 5.563796000205912,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2680330397878362
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.782707008416764,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.686870994395576,
+              4.90293100301642,
+              4.650440998375416,
+              5.489743998623453,
+              5.351712999981828
+            ],
+            "warm_mean_ms": 5.216339998878539,
+            "warm_p50_ms": 5.351712999981828,
+            "warm_p95_ms": 5.647445595241152,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4280601276994326
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.944573011016473,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.300282995449379,
+              4.791161001776345,
+              4.484433011384681,
+              9.606884996173903,
+              5.366994999349117
+            ],
+            "warm_mean_ms": 5.909951400826685,
+            "warm_p50_ms": 5.300282995449379,
+            "warm_p95_ms": 8.758906996808946,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 2.0986668305422036
+          }
+        ],
+        [
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.5955170032102615,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              6.034072008333169,
+              5.317249000654556,
+              10.329741009627469,
+              6.006115989293903,
+              6.639808008912951
+            ],
+            "warm_mean_ms": 6.8653972033644095,
+            "warm_p50_ms": 6.034072008333169,
+            "warm_p95_ms": 9.591754409484565,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.9924104205050501
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.880462991422974,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.737812007078901,
+              4.981966005288996,
+              4.694577990449034,
+              4.613348995917477,
+              5.626199999824166
+            ],
+            "warm_mean_ms": 4.930780999711715,
+            "warm_p50_ms": 4.737812007078901,
+            "warm_p95_ms": 5.497353200917132,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.41231646257718185
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.031726002926007,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.292399000609294,
+              4.71067099715583,
+              7.143971000914462,
+              7.095669003319927,
+              7.13739100319799
+            ],
+            "warm_mean_ms": 6.2760202010395005,
+            "warm_p50_ms": 7.095669003319927,
+            "warm_p95_ms": 7.142655001371168,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.1816250679603792
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.843938997713849,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              10.640149004757404,
+              6.326545000774786,
+              5.340927993529476,
+              8.309024997288361,
+              5.757061007898301
+            ],
+            "warm_mean_ms": 7.274741600849666,
+            "warm_p50_ms": 6.326545000774786,
+            "warm_p95_ms": 10.173924203263596,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 2.198736874940774
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 27.243103002547286,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              8.209099003579468,
+              6.785927005694248,
+              5.789735994767398,
+              6.012649988406338,
+              5.313777990522794
+            ],
+            "warm_mean_ms": 6.422237996594049,
+            "warm_p50_ms": 6.012649988406338,
+            "warm_p95_ms": 7.924464604002424,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.1315527669369436
+          }
+        ],
+        [
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.878676002495922,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.486769005074166,
+              4.637632999219932,
+              7.002387006650679,
+              6.743332007317804,
+              6.98691800062079
+            ],
+            "warm_mean_ms": 6.171407803776674,
+            "warm_p50_ms": 6.743332007317804,
+            "warm_p95_ms": 6.999293205444701,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.061116869994051
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.185471993172541,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.6212390006985515,
+              4.835798987187445,
+              4.646225002943538,
+              4.534433988737874,
+              4.620966996299103
+            ],
+            "warm_mean_ms": 4.651732795173302,
+            "warm_p50_ms": 4.6212390006985515,
+            "warm_p95_ms": 4.797884190338664,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.11129478277399814
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.798485999344848,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.435655999463052,
+              5.209203009144403,
+              6.442867001169361,
+              5.083937008748762,
+              4.630070005077869
+            ],
+            "warm_mean_ms": 5.360346604720689,
+            "warm_p50_ms": 5.209203009144403,
+            "warm_p95_ms": 6.241424800828099,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.672694670128808
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 26.031155008240603,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              7.822746993042529,
+              7.008476997725666,
+              5.961682996712625,
+              5.42690500151366,
+              4.870995995588601
+            ],
+            "warm_mean_ms": 6.218161596916616,
+            "warm_p50_ms": 5.961682996712625,
+            "warm_p95_ms": 7.659892993979156,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.1943634450774678
+          },
+          {
+            "cache_bytes": 1048576,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.8688780079828575,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.5149980034912005,
+              4.864357993938029,
+              4.543096991255879,
+              5.697112006600946,
+              4.922486987197772
+            ],
+            "warm_mean_ms": 5.108410396496765,
+            "warm_p50_ms": 4.922486987197772,
+            "warm_p95_ms": 5.660689205978997,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.48103830496276884
+          }
+        ]
+      ],
+      "uses_vector_index": true,
+      "warm_mean_ms": 6.018431311706081,
+      "warm_p50_ms": 5.36523899063468,
+      "warm_p95_ms": 8.515985001577064,
+      "warm_sample_count": 125,
+      "warm_stdev_ms": 2.541992133624295
+    },
+    "16777216": {
+      "first_query_after_restart_ms": [
+        7.7830179943703115,
+        6.824726995546371,
+        8.526313002221286,
+        7.888760999776423,
+        9.649372004787438
+      ],
+      "first_query_mean_ms": 8.134438199340366,
+      "restart_cycles": 5,
+      "runs": [
+        [
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.7830179943703115,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.658509002183564,
+              3.4208370052510872,
+              3.011729000718333,
+              2.7218229952268302,
+              2.4499489954905584
+            ],
+            "warm_mean_ms": 3.2525693997740746,
+            "warm_p50_ms": 3.011729000718333,
+            "warm_p95_ms": 4.410974602797069,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.8644182306334289
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.711572001222521,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5506179954390973,
+              2.1666340035153553,
+              2.2864310012664646,
+              2.33695498900488,
+              2.5139689969364554
+            ],
+            "warm_mean_ms": 2.3709213972324505,
+            "warm_p50_ms": 2.33695498900488,
+            "warm_p95_ms": 2.543288195738569,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.16029594997863544
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.17727700935211,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.1527880016947165,
+              2.382514998316765,
+              3.1221190001815557,
+              2.3048589937388897,
+              2.2682050039293244
+            ],
+            "warm_mean_ms": 2.4460971995722502,
+            "warm_p50_ms": 2.3048589937388897,
+            "warm_p95_ms": 2.9741981998085976,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.3868695906997572
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.14611900143791,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.2745160094927996,
+              2.515254993340932,
+              2.161126001738012,
+              2.757207999820821,
+              2.180843992391601
+            ],
+            "warm_mean_ms": 2.377789799356833,
+            "warm_p50_ms": 2.2745160094927996,
+            "warm_p95_ms": 2.708817398524843,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.25458357083337746
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.519540001638234,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3072390031302348,
+              3.039082992472686,
+              3.395528008695692,
+              2.9154200019547716,
+              2.514954991056584
+            ],
+            "warm_mean_ms": 2.8344449994619936,
+            "warm_p50_ms": 2.9154200019547716,
+            "warm_p95_ms": 3.3242390054510906,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4310649111508449
+          }
+        ],
+        [
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.824726995546371,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.848649001563899,
+              2.4945909972302616,
+              4.759083007229492,
+              3.0482639995170757,
+              2.5601590023143217
+            ],
+            "warm_mean_ms": 3.74214920157101,
+            "warm_p50_ms": 3.0482639995170757,
+            "warm_p95_ms": 5.630735802697018,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.492185875691039
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.422781003289856,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.746162994299084,
+              2.1985419880365953,
+              2.156515998649411,
+              2.121425000950694,
+              2.63586500659585
+            ],
+            "warm_mean_ms": 2.371702197706327,
+            "warm_p50_ms": 2.1985419880365953,
+            "warm_p95_ms": 2.724103396758437,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.29535195592655666
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.105944987619296,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              6.535474996780977,
+              3.4715410001808777,
+              3.7643700052285567,
+              3.059855996980332,
+              5.070279992651194
+            ],
+            "warm_mean_ms": 4.3803043983643875,
+            "warm_p50_ms": 3.7643700052285567,
+            "warm_p95_ms": 6.24243599595502,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.4203552988807153
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.628039999166504,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3085040011210367,
+              2.1548980002989992,
+              2.605617992230691,
+              2.211345999967307,
+              2.9629179916810244
+            ],
+            "warm_mean_ms": 2.4486567970598117,
+            "warm_p50_ms": 2.3085040011210367,
+            "warm_p95_ms": 2.8914579917909577,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.3359147378365543
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.672274008044042,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.069424991030246,
+              2.4977819994091988,
+              3.3746769913705066,
+              2.277225998113863,
+              2.2045469959266484
+            ],
+            "warm_mean_ms": 2.8847313951700926,
+            "warm_p50_ms": 2.4977819994091988,
+            "warm_p95_ms": 3.930475391098298,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.8100908996240133
+          }
+        ],
+        [
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.526313002221286,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.835296000237577,
+              2.885517998947762,
+              2.6547419984126464,
+              2.5400939921382815,
+              3.8298169965855777
+            ],
+            "warm_mean_ms": 3.349093397264369,
+            "warm_p50_ms": 2.885517998947762,
+            "warm_p95_ms": 4.634200199507177,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.9735758070811416
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.478221989003941,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5094409938901663,
+              2.3169929918367416,
+              2.0955810032319278,
+              2.0397959888214245,
+              3.1551649881293997
+            ],
+            "warm_mean_ms": 2.423395193181932,
+            "warm_p50_ms": 2.3169929918367416,
+            "warm_p95_ms": 3.026020189281553,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.44967289049560083
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.384917996707372,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.378406006959267,
+              2.3487860016757622,
+              2.315809004358016,
+              2.0679699955508113,
+              1.9911950075766072
+            ],
+            "warm_mean_ms": 2.4204332032240927,
+            "warm_p50_ms": 2.315809004358016,
+            "warm_p95_ms": 3.172482005902566,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.557285200445058
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.151176999788731,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.2453590063378215,
+              2.092523005558178,
+              1.9194119959138334,
+              1.9583469984354451,
+              1.937138003995642
+            ],
+            "warm_mean_ms": 2.030555802048184,
+            "warm_p50_ms": 1.9583469984354451,
+            "warm_p95_ms": 2.2147918061818928,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.13808900466559915
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.82875898887869,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.7284009993309155,
+              2.1284489921526983,
+              2.6712079998105764,
+              2.356206998229027,
+              2.7339960070094094
+            ],
+            "warm_mean_ms": 2.5236521993065253,
+            "warm_p50_ms": 2.6712079998105764,
+            "warm_p95_ms": 2.7328770054737106,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.27026041752415464
+          }
+        ],
+        [
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.888760999776423,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              6.376902005285956,
+              2.632372998050414,
+              2.774642998701893,
+              3.331644009449519,
+              2.4547139910282567
+            ],
+            "warm_mean_ms": 3.5140552005032077,
+            "warm_p50_ms": 2.774642998701893,
+            "warm_p95_ms": 5.767850406118669,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.6336663810783818
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 8.21545701182913,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.437347997329198,
+              2.3154939990490675,
+              2.214054999058135,
+              2.214671010733582,
+              2.409405991784297
+            ],
+            "warm_mean_ms": 2.318194799590856,
+            "warm_p50_ms": 2.3154939990490675,
+            "warm_p95_ms": 2.4317595962202176,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.10498396705038836
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.024685000535101,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.907282003434375,
+              2.2960240021348,
+              2.5480159965809435,
+              2.3565500014228746,
+              2.1432170033222064
+            ],
+            "warm_mean_ms": 2.45021780137904,
+            "warm_p50_ms": 2.3565500014228746,
+            "warm_p95_ms": 2.8354288020636886,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2937988454141556
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 25.512313994113356,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.9101559959817678,
+              2.899047001847066,
+              2.678340009879321,
+              4.115062998607755,
+              2.7512079977896065
+            ],
+            "warm_mean_ms": 3.270762800821103,
+            "warm_p50_ms": 2.899047001847066,
+            "warm_p95_ms": 4.074081598082557,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.6857005676291215
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.554745996254496,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.1834139885613695,
+              3.3956719998968765,
+              3.6907150060869753,
+              2.59735100553371,
+              2.2117810003692284
+            ],
+            "warm_mean_ms": 3.415786600089632,
+            "warm_p50_ms": 3.3956719998968765,
+            "warm_p95_ms": 4.884874192066491,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.1532522617184373
+          }
+        ],
+        [
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 9.649372004787438,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              7.270452988450415,
+              5.700206995243207,
+              3.700838002259843,
+              3.1380180007545277,
+              3.0864879954606295
+            ],
+            "warm_mean_ms": 4.5792007964337245,
+            "warm_p50_ms": 3.700838002259843,
+            "warm_p95_ms": 6.956403789808974,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.8422957019533757
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.753042995114811,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5110930000664666,
+              2.2697660024277866,
+              2.5086249952437356,
+              2.5312590005341917,
+              2.759531998890452
+            ],
+            "warm_mean_ms": 2.5160549994325265,
+            "warm_p50_ms": 2.5110930000664666,
+            "warm_p95_ms": 2.7138773992192,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.17338563043119312
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.892683995421976,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.2496869933092967,
+              2.2966390097280964,
+              3.282621008111164,
+              3.1930309924064204,
+              3.1732299976283684
+            ],
+            "warm_mean_ms": 2.839041600236669,
+            "warm_p50_ms": 3.1732299976283684,
+            "warm_p95_ms": 3.2647030049702153,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.5184815543264673
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.888634008239023,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5472080014878884,
+              2.6796029997058213,
+              2.59412701416295,
+              2.1047909976914525,
+              2.941805010777898
+            ],
+            "warm_mean_ms": 2.573506804765202,
+            "warm_p50_ms": 2.59412701416295,
+            "warm_p95_ms": 2.8893646085634828,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.3031960170513749
+          },
+          {
+            "cache_bytes": 16777216,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.251223003142513,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.2143850112333894,
+              2.4148520024027675,
+              2.3450000007869676,
+              2.746924990788102,
+              2.338667996809818
+            ],
+            "warm_mean_ms": 2.611966000404209,
+            "warm_p50_ms": 2.4148520024027675,
+            "warm_p95_ms": 3.120893007144332,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.37614464160156297
+          }
+        ]
+      ],
+      "uses_vector_index": true,
+      "warm_mean_ms": 2.87781135935802,
+      "warm_p50_ms": 2.5480159965809435,
+      "warm_p95_ms": 5.023283194168471,
+      "warm_sample_count": 125,
+      "warm_stdev_ms": 0.9703651470027589
+    },
+    "67108864": {
+      "first_query_after_restart_ms": [
+        7.045904989354312,
+        9.15824799449183,
+        7.463237998308614,
+        7.402151997666806,
+        7.572581002023071
+      ],
+      "first_query_mean_ms": 7.728424796368927,
+      "restart_cycles": 5,
+      "runs": [
+        [
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.045904989354312,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.4671229989035055,
+              2.9139929974917322,
+              2.2448860108852386,
+              2.2652420011581853,
+              2.0707369985757396
+            ],
+            "warm_mean_ms": 2.7923962014028803,
+            "warm_p50_ms": 2.2652420011581853,
+            "warm_p95_ms": 4.156496998621151,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.9896901777408885
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.385293996776454,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.002369998488575,
+              2.7762349927797914,
+              2.5206639984389767,
+              2.2040510084480047,
+              2.436330003547482
+            ],
+            "warm_mean_ms": 2.787930000340566,
+            "warm_p50_ms": 2.5206639984389767,
+            "warm_p95_ms": 3.7571429973468184,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.7090433049176922
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.279103002976626,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3455900081899017,
+              2.17575000715442,
+              2.094086987199262,
+              2.0526599982986227,
+              1.9828829972539097
+            ],
+            "warm_mean_ms": 2.130193999619223,
+            "warm_p50_ms": 2.094086987199262,
+            "warm_p95_ms": 2.3116220079828054,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.13918203858192177
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 26.920279997284524,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5755749957170337,
+              2.8253589989617467,
+              2.3459450021618977,
+              2.4145619972841814,
+              2.252484002383426
+            ],
+            "warm_mean_ms": 2.482784999301657,
+            "warm_p50_ms": 2.4145619972841814,
+            "warm_p95_ms": 2.775402198312804,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2249361246448054
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.301053995732218,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3720289900666103,
+              2.1666169923264533,
+              2.6428850105730817,
+              3.4509289980633184,
+              2.5605310074752197
+            ],
+            "warm_mean_ms": 2.6385981997009367,
+            "warm_p50_ms": 2.5605310074752197,
+            "warm_p95_ms": 3.289320200565271,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4898519145765559
+          }
+        ],
+        [
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 9.15824799449183,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.737257000873797,
+              4.922583000734448,
+              3.1800729921087623,
+              2.8620189987123013,
+              2.5739620032254606
+            ],
+            "warm_mean_ms": 3.855178799130954,
+            "warm_p50_ms": 3.1800729921087623,
+            "warm_p95_ms": 5.574322200845927,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.393307288884025
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 9.163569993688725,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.2620809943182394,
+              2.501840004697442,
+              3.4239550004713237,
+              3.481762993033044,
+              3.481605992419645
+            ],
+            "warm_mean_ms": 3.230248996987939,
+            "warm_p50_ms": 3.4239550004713237,
+            "warm_p95_ms": 3.4817315929103643,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4169995747144805
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 10.332028003176674,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              6.550184989464469,
+              4.384984000353143,
+              3.5292099928483367,
+              3.384044990525581,
+              3.1804399914108217
+            ],
+            "warm_mean_ms": 4.20577279292047,
+            "warm_p50_ms": 3.5292099928483367,
+            "warm_p95_ms": 6.117144791642204,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.388584383616597
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.464640002581291,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.6432659942656755,
+              2.8118900081608444,
+              2.7965670014964417,
+              4.539955989457667,
+              2.7783700061263517
+            ],
+            "warm_mean_ms": 3.114009799901396,
+            "warm_p50_ms": 2.7965670014964417,
+            "warm_p95_ms": 4.194342793198302,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.799941034708235
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.096545995911583,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.388291002716869,
+              2.2646089928457513,
+              3.6743170057889074,
+              3.238820005208254,
+              3.2469419966218993
+            ],
+            "warm_mean_ms": 2.962595800636336,
+            "warm_p50_ms": 3.238820005208254,
+            "warm_p95_ms": 3.588842003955506,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.608422392131833
+          }
+        ],
+        [
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.463237998308614,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.714064009021968,
+              3.3077960106311366,
+              2.5593680038582534,
+              3.573841997422278,
+              2.356495999265462
+            ],
+            "warm_mean_ms": 3.3023132040398195,
+            "warm_p50_ms": 3.3077960106311366,
+            "warm_p95_ms": 4.48601960670203,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.9371947553059077
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.520346000092104,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.5927200040314347,
+              2.172913998947479,
+              2.6482109969947487,
+              2.234302999568172,
+              2.268919997732155
+            ],
+            "warm_mean_ms": 2.383413599454798,
+            "warm_p50_ms": 2.268919997732155,
+            "warm_p95_ms": 2.637112798402086,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.21998844878109117
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.666894004913047,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3723420017631724,
+              2.7215019945288077,
+              2.2048169921617955,
+              2.150753003661521,
+              1.9766079931287095
+            ],
+            "warm_mean_ms": 2.285204397048801,
+            "warm_p50_ms": 2.2048169921617955,
+            "warm_p95_ms": 2.6516699959756806,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2818331103165687
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.17264699738007,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.638225007103756,
+              3.1998959893826395,
+              3.038736991584301,
+              2.4656519963173196,
+              2.267307005240582
+            ],
+            "warm_mean_ms": 2.7219633979257196,
+            "warm_p50_ms": 2.638225007103756,
+            "warm_p95_ms": 3.167664189822972,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.38993113485507785
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.01908001024276,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.295604004757479,
+              2.1458609990077093,
+              2.151196007616818,
+              2.0527199958451092,
+              22.938166992389597
+            ],
+            "warm_mean_ms": 6.3167095999233425,
+            "warm_p50_ms": 2.151196007616818,
+            "warm_p95_ms": 18.809654394863173,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 9.292082986878976
+          }
+        ],
+        [
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.402151997666806,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.33313699613791,
+              2.3409610003000125,
+              2.2456320002675056,
+              2.59486299182754,
+              2.153244990040548
+            ],
+            "warm_mean_ms": 2.733567595714703,
+            "warm_p50_ms": 2.3409610003000125,
+            "warm_p95_ms": 3.9854821952758357,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.9092382312454912
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.549883997649886,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              4.303156994865276,
+              5.040214004111476,
+              2.997659001266584,
+              2.640317994519137,
+              2.510006001102738
+            ],
+            "warm_mean_ms": 3.498270799173042,
+            "warm_p50_ms": 2.997659001266584,
+            "warm_p95_ms": 4.892802602262236,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.116780320115969
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 6.960426006116904,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.823931004968472,
+              2.4941209994722158,
+              2.837685009581037,
+              2.228626995929517,
+              2.2538149933097884
+            ],
+            "warm_mean_ms": 2.527635800652206,
+            "warm_p50_ms": 2.4941209994722158,
+            "warm_p95_ms": 2.834934208658524,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.29556247300346267
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.502358006197028,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.3929360031615943,
+              2.266262992634438,
+              2.0609670027624816,
+              2.195471999584697,
+              2.530293000745587
+            ],
+            "warm_mean_ms": 2.2891861997777596,
+            "warm_p50_ms": 2.266262992634438,
+            "warm_p95_ms": 2.5028216012287885,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.18047737933393704
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 23.579574000905268,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.1176250049611554,
+              2.364806001423858,
+              3.0509549978887662,
+              2.24760000128299,
+              2.1075679978821427
+            ],
+            "warm_mean_ms": 2.5777108006877825,
+            "warm_p50_ms": 2.364806001423858,
+            "warm_p95_ms": 3.1042910035466775,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4719118738238578
+          }
+        ],
+        [
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 7.572581002023071,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-0",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              5.119048990309238,
+              3.0558989965356886,
+              2.8160879883216694,
+              2.9208670021034777,
+              4.560841989587061
+            ],
+            "warm_mean_ms": 3.694548993371427,
+            "warm_p50_ms": 3.0558989965356886,
+            "warm_p95_ms": 5.007407590164803,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 1.067452010166235
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 14.415700992685743,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-1",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.5238650016253814,
+              2.773736006929539,
+              2.2906760132173076,
+              3.0042389989830554,
+              3.066543009481393
+            ],
+            "warm_mean_ms": 2.9318118060473353,
+            "warm_p50_ms": 3.0042389989830554,
+            "warm_p95_ms": 3.4324006031965837,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.4499911790702212
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.779829003382474,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-2",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.516236010706052,
+              2.562166002462618,
+              3.394200000911951,
+              2.525168005377054,
+              2.935376003733836
+            ],
+            "warm_mean_ms": 2.7866292046383023,
+            "warm_p50_ms": 2.562166002462618,
+            "warm_p95_ms": 3.302435201476328,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.3818134524544474
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 5.365605000406504,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-3",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              2.7693140000337735,
+              2.5900170003296807,
+              2.307137008756399,
+              2.349139002035372,
+              2.214295993326232
+            ],
+            "warm_mean_ms": 2.4459806008962914,
+            "warm_p50_ms": 2.349139002035372,
+            "warm_p95_ms": 2.733454600092955,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.2278291942951307
+          },
+          {
+            "cache_bytes": 67108864,
+            "chunk_count": 6000,
+            "ef_search": 20,
+            "explain": [
+              {
+                "Extra": "Using temporary; Using filesort",
+                "id": 1,
+                "key": null,
+                "key_len": null,
+                "possible_keys": "PRIMARY",
+                "ref": null,
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "a",
+                "type": "ALL"
+              },
+              {
+                "Extra": "",
+                "id": 1,
+                "key": "key0",
+                "key_len": "8",
+                "possible_keys": "key0",
+                "ref": "wikirag_cache_test.a.article_id",
+                "rows": "1",
+                "select_type": "PRIMARY",
+                "table": "<derived2>",
+                "type": "ref"
+              },
+              {
+                "Extra": "",
+                "id": 2,
+                "key": "embedding",
+                "key_len": "1538",
+                "possible_keys": null,
+                "ref": null,
+                "rows": "5344",
+                "select_type": "DERIVED",
+                "table": "c",
+                "type": "index"
+              }
+            ],
+            "first_observed_ms": 4.338093000114895,
+            "mariadb_version": "11.8.9-MariaDB-ubu2404",
+            "query_id": "cache-4",
+            "top_k": 5,
+            "uses_vector_index": true,
+            "warm_durations_ms": [
+              3.4247179864905775,
+              2.7673680015141144,
+              2.424232996418141,
+              2.3464679979952052,
+              2.5381609884789214
+            ],
+            "warm_mean_ms": 2.700189594179392,
+            "warm_p50_ms": 2.5381609884789214,
+            "warm_p95_ms": 3.293247989495285,
+            "warm_repeats": 5,
+            "warm_stdev_ms": 0.43502258855068476
+          }
+        ]
+      ],
+      "uses_vector_index": true,
+      "warm_mean_ms": 3.015793807338923,
+      "warm_p50_ms": 2.5900170003296807,
+      "warm_p95_ms": 4.683419605134986,
+      "warm_sample_count": 125,
+      "warm_stdev_ms": 1.9725793442825499
+    }
+  },
+  "warm_repeats_per_query": 5
+}

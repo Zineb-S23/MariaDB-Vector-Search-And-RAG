@@ -4,8 +4,12 @@ import json
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
+from statistics import mean, stdev
+from time import perf_counter
 
 import pytest
+from fakes import FakeEmbedder
 
 from wikirag.config import (
     EMBEDDING_DIM,
@@ -14,6 +18,7 @@ from wikirag.config import (
     load_settings,
 )
 from wikirag.db.connection import get_connection
+from wikirag.db.diagnostics import explain_search
 from wikirag.db.queries import (
     SEARCH_CHUNKS_SEMANTIC,
     build_hybrid_search_query,
@@ -27,6 +32,8 @@ from wikirag.errors import (
     SchemaMismatchError,
     ValidationError,
 )
+from wikirag.experiments.metric_mismatch import run_metric_mismatch
+from wikirag.experiments.reporting import write_experiment_report
 from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 
 
@@ -1574,3 +1581,288 @@ def test_hybrid_search_fills_top_k_after_filtering(
             [0.4, 0.72, 1.0],
             abs=1e-5,
         )
+
+
+def test_metric_mismatch_explain_smoke(
+    test_db_config: DbConfig,
+) -> None:
+    """Compare MariaDB index plans for three distance expressions.
+
+    Insert controlled vectors, inspect optimizer decisions, and
+    collect exploratory timings without asserting performance.
+
+    Args:
+        test_db_config: Isolated MariaDB test database configuration.
+
+    Returns:
+        None: Passes when the expected index behavior is observed.
+    """
+    article = _example_article()
+
+    vectors = (
+        (1.0, 0.0),
+        (0.8, 0.6),
+        (0.0, 1.0),
+        (3.0, 0.0),
+    )
+
+    chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Metric mismatch chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+    vector_json = json.dumps(query_vector)
+
+    variants = (
+        (
+            "cosine",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY VEC_DISTANCE_COSINE(
+                c.embedding, VEC_FromText(%s)
+            ) ASC
+            LIMIT %s
+            """,
+        ),
+        (
+            "euclidean",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY VEC_DISTANCE_EUCLIDEAN(
+                c.embedding, VEC_FromText(%s)
+            ) ASC
+            LIMIT %s
+            """,
+        ),
+        (
+            "wrapped_cosine",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY (
+                1 - VEC_DISTANCE_COSINE(
+                    c.embedding, VEC_FromText(%s)
+                )
+            ) DESC
+            LIMIT %s
+            """,
+        ),
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, chunks) == "inserted"
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        for name, statement in variants:
+            params = (vector_json, 3)
+
+            cursor.execute(
+                "EXPLAIN " + statement,
+                params,
+            )
+            plan = cursor.fetchall()
+
+            assert plan
+
+            uses_vector_index = any(
+                row["table"] == "c" and row["key"] == "embedding" for row in plan
+            )
+
+            # The cosine query should use our configured index.
+            if name == "cosine":
+                assert uses_vector_index, plan
+
+            # A Euclidean query cannot use a cosine-only index.
+            if name == "euclidean":
+                assert not uses_vector_index, plan
+
+            print(f"\n{name}:")
+            print(f"  Uses VECTOR index: {uses_vector_index}")
+
+            for row in plan:
+                print(f"  Table: {row['table']}, Access: {row['type']}, Index: {row['key']}")
+
+            # Warm up each query before taking five measurements.
+            cursor.execute(statement, params)
+            cursor.fetchall()
+
+            durations_ms = []
+
+            for _ in range(5):
+                started = perf_counter()
+
+                cursor.execute(statement, params)
+                hits = cursor.fetchall()
+
+                elapsed_ms = (perf_counter() - started) * 1000
+
+                assert len(hits) == 3
+                durations_ms.append(elapsed_ms)
+
+            print(f"  Mean latency: {mean(durations_ms):.4f} ms")
+            print(f"  Standard deviation: {stdev(durations_ms):.4f} ms")
+
+
+def test_explain_search_compares_native_distance_plans(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify diagnostics detect cosine and Euclidean index selection.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    cosine_plan = explain_search(
+        query_vector,
+        top_k=2,
+        distance="cosine",
+        config=test_db_config,
+    )
+
+    euclidean_plan = explain_search(
+        query_vector,
+        top_k=2,
+        distance="euclidean",
+        config=test_db_config,
+    )
+
+    assert any(row["table"] == "c" and row["key"] == "embedding" for row in cosine_plan)
+
+    assert not any(row["table"] == "c" and row["key"] == "embedding" for row in euclidean_plan)
+
+
+def test_explain_search_validates_filters_and_limits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify diagnostics support filtered plans and reject bad inputs.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    plan = explain_search(
+        query_vector,
+        top_k=2,
+        filters=SearchFilters(categories=("Physics",)),
+        config=test_db_config,
+    )
+
+    assert plan
+
+    # Filtered exact search deliberately avoids the vector index.
+    assert not any(row["table"] == "c" and row["key"] == "embedding" for row in plan)
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            top_k=0,
+            config=test_db_config,
+        )
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            filters=SearchFilters(article_ids=(-1,)),
+            config=test_db_config,
+        )
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            distance="manhattan",
+            config=test_db_config,
+        )
+
+
+def test_metric_mismatch_runner_returns_experiment_results(
+    test_db_config: DbConfig,
+    fake_embedder: FakeEmbedder,
+    tmp_path: Path,
+) -> None:
+    """Verify the reusable experiment reports actual MariaDB plans.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        fake_embedder: Deterministic query-embedding implementation.
+        tmp_path: Temporary directory for the JSON experiment report.
+    """
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    report = run_metric_mismatch(
+        fake_embedder,
+        sample_query="How does physics explain motion?",
+        repeats=5,
+        config=test_db_config,
+    )
+
+    assert report["experiment"] == "metric_mismatch"
+    assert report["chunk_count"] == 2
+    assert report["repeats"] == 5
+
+    variants = report["variants"]
+
+    assert set(variants) == {
+        "cosine",
+        "euclidean",
+        "wrapped_cosine",
+    }
+
+    for result in variants.values():
+        assert result["explain"]
+        assert result["rows_returned"] == 2
+        assert len(result["durations_ms"]) == 5
+        assert result["mean_ms"] > 0
+        assert result["p95_ms"] >= result["p50_ms"]
+
+    assert variants["cosine"]["uses_vector_index"]
+    assert not variants["euclidean"]["uses_vector_index"]
+
+    # Save actual MariaDB experiment results as reproducible JSON.
+    destination = tmp_path / "reports" / "metric_mismatch.json"
+
+    saved_path = write_experiment_report(
+        report,
+        output_path=destination,
+    )
+
+    assert saved_path == destination
+    assert destination.is_file()
+
+    saved_report = json.loads(destination.read_text(encoding="utf-8"))
+
+    # Verify that serialization preserves the complete experiment.
+    assert saved_report == report

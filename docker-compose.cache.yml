@@ -1,0 +1,32 @@
+
+# Dedicated MariaDB instance for HNSW cache experiments.
+
+services:
+  cache-db:
+    image: mariadb:11.8
+
+    command:
+      - mariadbd
+      - --mhnsw-max-cache-size=${HNSW_CACHE_BYTES:-16777216}
+
+    ports:
+      - "127.0.0.1:13308:3306"
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Root password required}
+      MARIADB_DATABASE: wikirag_cache_test
+      MARIADB_USER: ${DB_USER:?Database user required}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Database password required}
+
+    volumes:
+      - mariadb_cache_data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  mariadb_cache_data:

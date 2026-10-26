@@ -1,13 +1,16 @@
-"""Wikipedia acquisition helpers: seed titles, article fetching and snapshots."""
-
-from __future__ import annotations
-
 import csv
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote
 
 from wikirag.errors import ValidationError
 
 SEED_COLUMNS = ("topic", "title")
+WIKIPEDIA_ARTICLE_URL = "https://en.wikipedia.org/wiki/"
+CATEGORY_PREFIX = "Category:"
 
 
 def _normalize_title(title: str) -> str:
@@ -88,3 +91,154 @@ def load_seed_titles(path: Path) -> list[tuple[str, str]]:
     if not seeds:
         raise ValidationError(f"Seed file {path} contains no seed rows")
     return seeds
+
+
+@dataclass(frozen=True, slots=True)
+class RawArticle:
+    """A Wikipedia article as downloaded, before cleaning and chunking.
+
+    Attributes:
+        article_id: Wikipedia page id (positive).
+        title: Canonical article title.
+        url: Address of the article on English Wikipedia.
+        revision_id: Id of the downloaded revision.
+        revised_at: Time of that revision, as naive UTC.
+        text: Plain article text as returned by Wikipedia.
+        fetched_at: Time of the download, as naive UTC.
+        topic: Topic label from the seed list, if known.
+        categories: Visible category names without the ``Category:`` prefix, sorted.
+        linked_titles: Titles of linked articles, sorted and without duplicates.
+    """
+
+    article_id: int
+    title: str
+    url: str
+    revision_id: int
+    revised_at: datetime
+    text: str
+    fetched_at: datetime
+    topic: str | None = None
+    categories: tuple[str, ...] = ()
+    linked_titles: tuple[str, ...] = ()
+
+
+def _is_positive_int(value: object) -> bool:
+    """Return whether a value is a real positive integer.
+
+    Args:
+        value: Any value to check.
+
+    Returns:
+        True for integers above zero; False for everything else, including booleans.
+    """
+    # bool is a subclass of int, so it has to be excluded explicitly
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _parse_timestamp(value: object, title: str) -> datetime:
+    """Convert a Wikipedia timestamp such as ``2026-09-30T08:15:00Z`` to naive UTC.
+
+    Args:
+        value: The timestamp from the API response.
+        title: Article title, used in error messages.
+
+    Returns:
+        The time as a naive ``datetime`` in UTC.
+
+    Raises:
+        ValidationError: If the value is not a timestamp in the expected format.
+    """
+    if not isinstance(value, str):
+        raise ValidationError(f"{title!r}: invalid revision timestamp")
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as error:
+        raise ValidationError(f"{title!r}: invalid revision timestamp {value!r}") from error
+
+
+def _collect_titles(entries: Sequence[Any] | None, *, strip_prefix: str = "") -> tuple[str, ...]:
+    """Collect unique, sorted titles from a list of API entries.
+
+    Args:
+        entries: List of objects that each have a ``title`` key, or None.
+        strip_prefix: Text to remove from the start of every title.
+
+    Returns:
+        Sorted titles without duplicates or empty values.
+    """
+    names: set[str] = set()
+    for entry in entries or ():
+        name = entry.get("title") if isinstance(entry, Mapping) else None
+        if isinstance(name, str):
+            name = name.removeprefix(strip_prefix).strip()
+            if name:
+                names.add(name)
+    # sorting makes the snapshot identical on every run
+    return tuple(sorted(names))
+
+
+def _article_url(title: str) -> str:
+    """Build the English Wikipedia address of an article.
+
+    Args:
+        title: Article title.
+
+    Returns:
+        The full address, with spaces written as underscores.
+    """
+    return WIKIPEDIA_ARTICLE_URL + quote(title.replace(" ", "_"), safe="_(),'!*~")
+
+
+def parse_article_page(
+    page: Mapping[str, Any],
+    *,
+    fetched_at: datetime,
+    topic: str | None = None,
+) -> RawArticle:
+    """Turn one page object from the Wikipedia API into a ``RawArticle``.
+
+    Args:
+        page: A page object from a Wikipedia ``action=query`` response.
+        fetched_at: Time of the download, as naive UTC.
+        topic: Topic label from the seed list, if known.
+
+    Returns:
+        The parsed article.
+
+    Raises:
+        ValidationError: If the page does not exist or lacks its id, revision or text.
+    """
+    title = page.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ValidationError("Wikipedia page has no title")
+    if page.get("missing") or page.get("invalid"):
+        raise ValidationError(f"Wikipedia page not found: {title!r}")
+
+    article_id = page.get("pageid")
+    if not _is_positive_int(article_id):
+        raise ValidationError(f"{title!r}: missing or invalid page id")
+
+    revisions = page.get("revisions")
+    if not revisions:
+        raise ValidationError(f"{title!r}: no revision information")
+    revision_id = revisions[0].get("revid")
+    if not _is_positive_int(revision_id):
+        raise ValidationError(f"{title!r}: invalid revision id")
+    revised_at = _parse_timestamp(revisions[0].get("timestamp"), title)
+
+    text = page.get("extract")
+    if not isinstance(text, str) or not text.strip():
+        raise ValidationError(f"{title!r}: article has no text")
+
+    return RawArticle(
+        article_id=article_id,
+        title=title,
+        url=_article_url(title),
+        revision_id=revision_id,
+        revised_at=revised_at,
+        text=text,
+        fetched_at=fetched_at,
+        topic=topic,
+        categories=_collect_titles(page.get("categories"), strip_prefix=CATEGORY_PREFIX),
+        linked_titles=_collect_titles(page.get("links")),
+    )

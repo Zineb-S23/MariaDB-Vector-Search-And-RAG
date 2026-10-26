@@ -579,3 +579,22 @@ def test_fake_matches_titles_and_links_exactly(
         1,
         2,
     }
+
+
+def test_fake_ef_search_validates_upper_bound(
+    fake_repo: InMemoryRepository,
+) -> None:
+    """Reject out-of-range settings without changing stored state.
+
+    Args:
+        fake_repo: Isolated in-memory repository.
+    """
+    fake_repo.set_ef_search(10_000)
+
+    assert fake_repo._ef_search == 10_000
+
+    with pytest.raises(ValidationError):
+        fake_repo.set_ef_search(10_001)
+
+    # An invalid update must preserve the previously accepted value.
+    assert fake_repo._ef_search == 10_000

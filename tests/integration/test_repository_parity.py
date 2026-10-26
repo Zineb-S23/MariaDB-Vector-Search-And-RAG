@@ -361,3 +361,27 @@ def test_invalid_search_filter_parity(
             query_vector,
             filters=invalid_filters,
         )
+
+
+def test_ef_search_validation_parity(
+    repository: InMemoryRepository | WikiRepository,
+) -> None:
+    """Verify both repositories accept the same HNSW settings.
+
+    Args:
+        repository: Isolated fake or MariaDB repository.
+    """
+    for value in (1, 40, 10_000):
+        assert repository.set_ef_search(value) is None
+
+    for invalid_value in (
+        0,
+        -1,
+        10_001,
+        True,
+        20.0,
+        "20",
+        None,
+    ):
+        with pytest.raises(ValidationError):
+            repository.set_ef_search(invalid_value)

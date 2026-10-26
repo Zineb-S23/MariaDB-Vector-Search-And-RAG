@@ -1394,3 +1394,183 @@ def test_semantic_search_plan_selects_vector_index(
 
     # The inner nearest-neighbor query should select the VECTOR index.
     assert any(row["table"] == "c" and row["key"] == "embedding" for row in plan), plan
+
+
+def test_semantic_and_exact_search_agree_on_small_dataset(
+    test_db_config: DbConfig,
+) -> None:
+    """Compare approximate and exact retrieval on controlled vectors.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+
+    Returns:
+        None: Passes when both paths agree on nearest neighbors.
+    """
+    article = _example_article()
+
+    vectors = (
+        (1.0, 0.0),
+        (0.8, 0.6),
+        (0.6, 0.8),
+        (0.0, 1.0),
+    )
+
+    chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Comparison chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, chunks) == "inserted"
+
+        repo.set_ef_search(100)
+
+        approximate_hits = repo.search_chunks(
+            query_vector,
+            top_k=3,
+        )
+
+        exact_hits = repo.search_chunks_exact(
+            query_vector,
+            top_k=3,
+        )
+
+        assert len(approximate_hits) == 3
+        assert len(exact_hits) == 3
+
+        assert [hit.chunk_index for hit in approximate_hits] == [
+            0,
+            1,
+            2,
+        ]
+
+        assert [hit.chunk_id for hit in approximate_hits] == [hit.chunk_id for hit in exact_hits]
+
+        for approximate, exact in zip(
+            approximate_hits,
+            exact_hits,
+            strict=True,
+        ):
+            assert approximate.distance == pytest.approx(
+                exact.distance,
+                abs=1e-5,
+            )
+
+            assert approximate.score == pytest.approx(
+                exact.score,
+                abs=1e-5,
+            )
+
+
+def test_hybrid_search_fills_top_k_after_filtering(
+    test_db_config: DbConfig,
+) -> None:
+    """Return three eligible chunks despite closer excluded results.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+
+    Returns:
+        None: Passes when filtering happens before top-K selection.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    physics_vectors = (
+        (1.0, 0.0),
+        (0.96, 0.28),
+        (0.8, 0.6),
+    )
+
+    biology_vectors = (
+        (0.6, 0.8),
+        (0.28, 0.96),
+        (0.0, 1.0),
+    )
+
+    physics_chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Physics chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(physics_vectors)
+    )
+
+    biology_chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Biology chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(biology_vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                physics,
+                physics_chunks,
+            )
+            == "inserted"
+        )
+
+        assert (
+            repo.ingest_article(
+                biology,
+                biology_chunks,
+            )
+            == "inserted"
+        )
+
+        repo.set_ef_search(100)
+
+        unfiltered = repo.search_chunks(
+            query_vector,
+            top_k=3,
+        )
+
+        # The globally nearest three chunks belong to Physics.
+        assert len(unfiltered) == 3
+        assert all(hit.article_id == physics.article_id for hit in unfiltered)
+
+        filtered = repo.search_chunks(
+            query_vector,
+            top_k=3,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        # Filtering must happen before the top-K limit.
+        assert len(filtered) == 3
+
+        assert all(hit.article_id == biology.article_id for hit in filtered)
+
+        assert [hit.chunk_index for hit in filtered] == [
+            0,
+            1,
+            2,
+        ]
+
+        assert [hit.distance for hit in filtered] == pytest.approx(
+            [0.4, 0.72, 1.0],
+            abs=1e-5,
+        )

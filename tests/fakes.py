@@ -917,25 +917,24 @@ class InMemoryRepository:
         return len(self._chunks)
 
     def set_ef_search(self, value: int) -> None:
-        """
-        Accept the HNSW search parameter for interface compatibility.
+        """Store a validated HNSW search setting for interface parity.
 
-        The fake uses exact search, so this setting does not change
-        its search algorithm.
+        The fake repository always uses exact cosine search, so this
+        setting does not change its retrieval algorithm.
 
         Args:
-            value (int): Positive HNSW ef_search setting.
+            value: HNSW search breadth, an integer from 1 to 10000.
 
         Returns:
-            None: Stores the setting without modifying search behavior.
+            None: Stores the validated setting.
 
         Raises:
-            ValidationError: If value is not a positive integer.
+            DatabaseConnectionError: If the repository is closed.
+            ValidationError: If value is not an integer from 1 to 10000.
         """
-
         self._check_open()
 
-        if type(value) is not int or value < 1:
-            raise ValidationError("ef_search must be positive")
+        if type(value) is not int or not 1 <= value <= 10_000:
+            raise ValidationError("ef_search must be an integer between 1 and 10000")
 
         self._ef_search = value

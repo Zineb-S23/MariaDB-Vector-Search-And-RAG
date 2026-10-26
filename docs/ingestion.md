@@ -23,12 +23,6 @@ returns `(topic, title)` pairs in file order. While reading, it:
 The list currently holds a small starter set. It will grow once the team has agreed on the
 final topics.
 
-## Running the tests
-
-```bash
-uv run --extra dev python -m pytest tests/unit/test_wikipedia_seed.py -q
-```
-
 
 ## Wikipedia source
 
@@ -133,3 +127,15 @@ adding the embedding. Invalid settings, such as an overlap that is not smaller t
 
 The chunk size and overlap are only starting values. The planned experiment compares
 other settings on the same questions before the final values are chosen.
+## Building the snapshot
+
+The committed snapshot `data/snapshot/wikipedia_snapshot.jsonl` holds the 18 articles of
+`data/seed_titles.csv`, downloaded on 2026-10-26. To rebuild it (this needs internet access
+and gives the current Wikipedia text, so the result can differ):
+
+```bash
+uv run python -c "from pathlib import Path; from wikirag.ingestion.wikipedia import build_snapshot; print(build_snapshot(Path('data/seed_titles.csv'), Path('data/snapshot/wikipedia_snapshot.jsonl')))"
+```
+
+The `revision_id` and `fetched_at` fields of every article record which Wikipedia version
+was used.

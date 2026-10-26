@@ -41,8 +41,10 @@ from wikirag.db.queries import (
     LIST_CATEGORIES,
     LIST_TOPICS,
     RESOLVE_LINK_TARGETS,
+    SEARCH_CHUNKS_SEMANTIC,
     UPDATE_ARTICLE,
     UPSERT_CATEGORY,
+    build_hybrid_search_query,
 )
 from wikirag.errors import (
     DatabaseConnectionError,
@@ -754,27 +756,74 @@ class WikiRepository:
         return [self._article_from_row(row) for row in rows]
 
     def delete_article(self, article_id: int) -> bool:
-        """Delete an article and its dependent database records.
+        """Delete an article and its dependent records atomically.
 
-        The database's foreign keys remove outgoing links,
-        category associations and chunks. Incoming links retain
-        their titles but lose their resolved target ID.
+        Explicitly delete indexed vector chunks before their parent
+        article to avoid relying on cascading deletion for HNSW rows.
 
         Args:
-            article_id: Wikipedia identifier of the article to delete.
+            article_id: Wikipedia article identifier to delete.
 
         Returns:
             bool: True if the article existed, otherwise False.
 
         Raises:
             DatabaseConnectionError: If MariaDB is unavailable.
-            DatabaseError: If deletion fails.
+            DatabaseError: If the database operation fails.
         """
         self._check_open()
 
         with transaction(self._conn) as conn, conn.cursor() as cursor:
+            # Remove VECTOR rows directly before deleting the parent article.
+            cursor.execute(DELETE_ARTICLE_CHUNKS, (article_id,))
+
+            # Existing foreign keys still handle other dependent records.
             cursor.execute(DELETE_ARTICLE_BY_ID, (article_id,))
+
             return cursor.rowcount > 0
+
+    @staticmethod
+    def _serialize_search_vector(query_embedding: Sequence[float]) -> str:
+        """Validate a query embedding and serialize it for MariaDB.
+
+        The serialized JSON vector is passed to VEC_FromText in SQL.
+
+        Args:
+            query_embedding: Numeric query embedding containing 384 values.
+
+        Returns:
+            str: JSON array containing finite float32-compatible values.
+
+        Raises:
+            EmbeddingDimensionError: If the query has incorrect dimensions,
+                non-numeric values, non-finite values, or zero magnitude.
+        """
+        if isinstance(query_embedding, (str, bytes)):
+            raise EmbeddingDimensionError("Query embedding must be numeric")
+
+        try:
+            values = tuple(float(value) for value in query_embedding)
+        except (TypeError, ValueError, OverflowError):
+            raise EmbeddingDimensionError("Query embedding must contain numbers") from None
+
+        if len(values) != EMBEDDING_DIM:
+            raise EmbeddingDimensionError(f"Expected {EMBEDDING_DIM} dimensions, got {len(values)}")
+
+        if not all(math.isfinite(value) for value in values):
+            raise EmbeddingDimensionError("Query embedding contains non-finite values")
+
+        try:
+            # MariaDB VECTOR values are stored as 32-bit floating-point numbers.
+            values32 = [struct.unpack("<f", struct.pack("<f", value))[0] for value in values]
+        except (OverflowError, struct.error):
+            raise EmbeddingDimensionError(
+                "Query embedding contains values outside float32 range"
+            ) from None
+
+        if not any(value != 0.0 for value in values32):
+            raise EmbeddingDimensionError("Query embedding cannot be a zero vector")
+
+        return json.dumps(values32, allow_nan=False)
 
     def search_chunks(
         self,
@@ -783,23 +832,90 @@ class WikiRepository:
         top_k: int = 5,
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
-        """Search stored chunks using native MariaDB vector similarity.
+        """Retrieve ranked chunks using MariaDB native cosine search.
 
-        This method is reserved for the database-search implementation.
-        No semantic or hybrid retrieval is performed by this stub.
+        Unfiltered searches use the HNSW-eligible semantic query.
+        Filtered searches apply relational SQL constraints before
+        exact cosine ranking to avoid selective-filter under-fill.
 
         Args:
-            query_embedding: Query vector with 384 dimensions.
-            top_k: Maximum number of matching chunks to return.
-            filters: Optional relational search constraints.
+            query_embedding: Numeric query embedding containing 384 values.
+            top_k: Maximum number of results, between 1 and 100.
+            filters: Optional relational and distance constraints.
 
         Returns:
-            list[SearchHit]: Ranked matching chunks when implemented.
+            list[SearchHit]: Ranked chunks with article metadata,
+                cosine distance, and similarity score.
 
         Raises:
-            NotImplementedError: Native vector search is not yet implemented.
+            ValidationError: If search parameters are invalid.
+            EmbeddingDimensionError: If the query embedding is invalid.
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If the SQL query fails.
         """
-        raise NotImplementedError("search_chunks will be implemented in feature/database-search")
+
+        self._check_open()
+
+        if type(top_k) is not int or not 1 <= top_k <= 100:
+            raise ValidationError("top_k must be an integer between 1 and 100")
+
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
+
+            filters.validate()
+
+        vector_json = self._serialize_search_vector(query_embedding)
+
+        if filters is not None and not filters.is_empty():
+            # Filter eligible articles before ranking to avoid top-K under-fill.
+            statement, params = build_hybrid_search_query(
+                filters,
+                vector_json=vector_json,
+                top_k=top_k,
+            )
+        else:
+            # Preserve the HNSW-eligible query for unfiltered searches.
+            statement = SEARCH_CHUNKS_SEMANTIC
+            params = (vector_json, vector_json, top_k)
+
+        rows = self._fetch_all(statement, params)
+
+        return self._search_hits_from_rows(rows)
+
+    @staticmethod
+    def _search_hits_from_rows(
+        rows: Sequence[dict[str, Any]],
+    ) -> list[SearchHit]:
+        """Convert MariaDB search rows into shared SearchHit records.
+
+        Args:
+            rows: Ranked database rows containing chunk metadata
+                and cosine distances.
+
+        Returns:
+            list[SearchHit]: Ranked search results with similarity scores.
+        """
+        hits: list[SearchHit] = []
+
+        for row in rows:
+            distance = float(row["distance"])
+
+            hits.append(
+                SearchHit(
+                    chunk_id=int(row["chunk_id"]),
+                    article_id=int(row["article_id"]),
+                    article_title=row["article_title"],
+                    article_url=row["article_url"],
+                    chunk_index=int(row["chunk_index"]),
+                    section_title=row["section_title"],
+                    text=row["text"],
+                    distance=distance,
+                    score=1.0 - distance,
+                )
+            )
+
+        return hits
 
     def search_chunks_exact(
         self,
@@ -808,37 +924,88 @@ class WikiRepository:
         top_k: int = 5,
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
-        """Search chunks using an exact cosine-distance baseline.
+        """Retrieve exact cosine-ranked chunks without using HNSW.
 
-        This method is reserved for evaluation against HNSW results.
+        Scan eligible stored vectors using MariaDB's native
+        VEC_DISTANCE_COSINE function. Apply optional relational
+        filters before selecting the nearest chunks.
 
         Args:
-            query_embedding: Query vector with 384 dimensions.
-            top_k: Maximum number of matching chunks to return.
-            filters: Optional relational search constraints.
+            query_embedding: Numeric query vector containing 384 values.
+            top_k: Maximum number of results, between 1 and 100.
+            filters: Optional relational and distance constraints.
 
         Returns:
-            list[SearchHit]: Exact ranked results when implemented.
+            list[SearchHit]: Exact nearest neighbors ordered by
+                ascending cosine distance.
 
         Raises:
-            NotImplementedError: Exact vector search is not yet implemented.
+            ValidationError: If search parameters are invalid.
+            EmbeddingDimensionError: If the query embedding is invalid.
+            DatabaseConnectionError: If MariaDB is unavailable.
+            DatabaseError: If the SQL query fails.
         """
-        raise NotImplementedError(
-            "search_chunks_exact will be implemented in feature/database-search"
+        self._check_open()
+
+        if type(top_k) is not int or not 1 <= top_k <= 100:
+            raise ValidationError("top_k must be an integer between 1 and 100")
+
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
+
+            filters.validate()
+
+        vector_json = self._serialize_search_vector(query_embedding)
+
+        # An empty SearchFilters object means no relational constraints.
+        active_filters = filters if filters is not None else SearchFilters()
+
+        # This SQL path excludes the native HNSW index.
+        statement, params = build_hybrid_search_query(
+            active_filters,
+            vector_json=vector_json,
+            top_k=top_k,
         )
 
-    def set_ef_search(self, value: int) -> None:
-        """Set the HNSW search parameter for the current MariaDB session.
+        rows = self._fetch_all(statement, params)
 
-        This method is reserved for the database-search implementation.
+        return self._search_hits_from_rows(rows)
+
+    def set_ef_search(self, value: int) -> None:
+        """Configure HNSW search breadth for this MariaDB session.
+
+        Set the number of vector-index candidates considered during
+        approximate nearest-neighbor search. The setting affects only
+        this repository's current database connection.
 
         Args:
-            value: Positive integer controlling HNSW search breadth.
+            value: HNSW search breadth, an integer from 1 to 10000.
 
         Returns:
-            None: The session setting is updated when implemented.
+            None: The session parameter is updated successfully.
 
         Raises:
-            NotImplementedError: HNSW search configuration is not yet implemented.
+            ValidationError: If value is not an integer from 1 to 10000.
+            DatabaseConnectionError: If the repository is closed or
+                its MariaDB connection becomes unavailable.
+            DatabaseError: If MariaDB rejects the SQL statement.
         """
-        raise NotImplementedError("set_ef_search will be implemented in feature/database-search")
+        self._check_open()
+
+        if type(value) is not int or not 1 <= value <= 10_000:
+            raise ValidationError("ef_search must be an integer between 1 and 10000")
+
+        try:
+            with self._conn.cursor() as cursor:
+                # SESSION changes only this connection, never the global setting.
+                cursor.execute(
+                    "SET SESSION mhnsw_ef_search = %s",
+                    (value,),
+                )
+        except pymysql.err.OperationalError:
+            raise DatabaseConnectionError(
+                "Database connection failed while setting ef_search"
+            ) from None
+        except pymysql.MySQLError:
+            raise DatabaseError("Failed to configure MariaDB HNSW search breadth") from None

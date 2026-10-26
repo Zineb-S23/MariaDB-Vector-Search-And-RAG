@@ -105,6 +105,7 @@ class SearchFilters:
     max_distance: float | None = None
 
     def is_empty(self) -> bool: ...
+    def validate(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +133,17 @@ class SearchHit:
 | `max_distance` | Keep only results within the cosine-distance threshold. |
 
 `SearchHit` is the public return type. Do **not** expose raw SQL tuples or dictionaries as search results.
+
+`SearchFilters.validate()` raises `ValidationError` for invalid
+filter values. Topic and category filters require tuples of
+non-empty strings. Article IDs must be positive integers.
+`min_length_chars` must be a non-negative integer.
+`edited_since` must be a naive UTC datetime.
+`max_distance` must be a finite number between 0 and 2.
+
+Both `WikiRepository` and `InMemoryRepository` call this method
+before executing a filtered search. This preserves consistent
+validation across the real and fake implementations.
 
 ### 4.3 Pipeline, RAG, and evaluation records
 

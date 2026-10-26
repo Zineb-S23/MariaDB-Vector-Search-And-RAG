@@ -4,8 +4,12 @@ import json
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
+from statistics import mean, stdev
+from time import perf_counter
 
 import pytest
+from fakes import FakeEmbedder
 
 from wikirag.config import (
     EMBEDDING_DIM,
@@ -14,6 +18,11 @@ from wikirag.config import (
     load_settings,
 )
 from wikirag.db.connection import get_connection
+from wikirag.db.diagnostics import demo_transaction_visibility, explain_search
+from wikirag.db.queries import (
+    SEARCH_CHUNKS_SEMANTIC,
+    build_hybrid_search_query,
+)
 from wikirag.db.repository import WikiRepository
 from wikirag.db.schema import init_schema
 from wikirag.errors import (
@@ -23,7 +32,10 @@ from wikirag.errors import (
     SchemaMismatchError,
     ValidationError,
 )
-from wikirag.models import ArticleRecord, ChunkRecord
+from wikirag.experiments.metric_mismatch import run_metric_mismatch
+from wikirag.experiments.reporting import write_experiment_report
+from wikirag.experiments.transaction_visibility import run_transaction_visibility
+from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 
 
 @pytest.fixture
@@ -810,3 +822,1339 @@ def test_delete_source_removes_outgoing_links(
         row = cursor.fetchone()
 
     assert row["total"] == 0
+
+
+def test_semantic_search_returns_ranked_hits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify MariaDB returns correctly ranked native vector results.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+    query_embedding = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        hits = repo.search_chunks(query_embedding, top_k=2)
+
+        assert len(hits) == 2
+        assert [hit.chunk_index for hit in hits] == [0, 1]
+
+        assert hits[0].article_id == article.article_id
+        assert hits[0].article_title == article.title
+        assert hits[0].article_url == article.url
+        assert hits[0].text == "Physics explains motion."
+
+        assert hits[0].distance == pytest.approx(0.0, abs=1e-5)
+        assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+
+        assert hits[1].distance == pytest.approx(1.0, abs=1e-5)
+
+        limited = repo.search_chunks(query_embedding, top_k=1)
+
+        assert len(limited) == 1
+        assert limited[0].chunk_index == 0
+
+
+def test_semantic_search_returns_empty_list(
+    test_db_config: DbConfig,
+) -> None:
+    """Return no matches when the database contains no chunks.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_embedding = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.search_chunks(query_embedding) == []
+
+
+def test_semantic_search_rejects_invalid_inputs(
+    test_db_config: DbConfig,
+) -> None:
+    """Reject invalid query vectors, limits, and unsupported filters.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    valid_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks((1.0,))
+
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks((0.0,) * EMBEDDING_DIM)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=0)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=101)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks(valid_vector, top_k=True)
+
+
+def test_hybrid_search_filters_before_top_k(
+    test_db_config: DbConfig,
+) -> None:
+    """Return eligible chunks even when closer chunks fail a filter.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Cells contain genetic material.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(physics, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        # The closest unfiltered result belongs to Physics.
+        unfiltered = repo.search_chunks(query_vector, top_k=1)
+
+        assert len(unfiltered) == 1
+        assert unfiltered[0].article_id == physics.article_id
+
+        # Biology must still be returned, despite being farther away.
+        filtered = repo.search_chunks(
+            query_vector,
+            top_k=1,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        assert len(filtered) == 1
+        assert filtered[0].article_id == biology.article_id
+        assert filtered[0].text == "Cells contain genetic material."
+        assert filtered[0].distance == pytest.approx(0.2, abs=1e-5)
+
+
+def test_hybrid_search_combines_relational_filters(
+    test_db_config: DbConfig,
+) -> None:
+    """Apply metadata, category, link, and distance filters together.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    source = replace(
+        _example_article(),
+        linked_titles=("Test Biology Article",),
+    )
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        length_chars=150,
+        revised_at=datetime(2026, 4, 1),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Biology studies living organisms.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        assert repo.resolve_links() == 1
+
+        filters = SearchFilters(
+            topics=("BIOLOGY",),
+            categories=("biology",),
+            article_ids=(990002,),
+            exclude_article_ids=(990001,),
+            min_length_chars=100,
+            edited_since=datetime(2026, 2, 1),
+            linked_from_article_id=990001,
+            max_distance=0.3,
+        )
+
+        hits = repo.search_chunks(
+            query_vector,
+            top_k=5,
+            filters=filters,
+        )
+
+        assert len(hits) == 1
+        assert hits[0].article_id == biology.article_id
+        assert hits[0].distance == pytest.approx(0.2, abs=1e-5)
+
+        # A stricter distance threshold excludes the same result.
+        stricter = replace(filters, max_distance=0.1)
+
+        assert (
+            repo.search_chunks(
+                query_vector,
+                filters=stricter,
+            )
+            == []
+        )
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected_article_ids"),
+    (
+        pytest.param(
+            SearchFilters(topics=("BIOLOGY",)),
+            [990002],
+            id="topic-case-insensitive",
+        ),
+        pytest.param(
+            SearchFilters(categories=("biology",)),
+            [990002],
+            id="category-case-insensitive",
+        ),
+        pytest.param(
+            SearchFilters(article_ids=(990002,)),
+            [990002],
+            id="include-article",
+        ),
+        pytest.param(
+            SearchFilters(exclude_article_ids=(990001,)),
+            [990002],
+            id="exclude-article",
+        ),
+        pytest.param(
+            SearchFilters(min_length_chars=100),
+            [990002],
+            id="minimum-length",
+        ),
+        pytest.param(
+            SearchFilters(edited_since=datetime(2026, 2, 1)),
+            [990002],
+            id="revision-date",
+        ),
+        pytest.param(
+            SearchFilters(linked_from_article_id=990001),
+            [990002],
+            id="linked-from-article",
+        ),
+        pytest.param(
+            SearchFilters(max_distance=0.3),
+            [990001, 990002],
+            id="maximum-distance",
+        ),
+        pytest.param(
+            SearchFilters(min_length_chars=150),
+            [],
+            id="strict-length-boundary",
+        ),
+        pytest.param(
+            SearchFilters(
+                topics=("biology",),
+                categories=("Physics",),
+            ),
+            [],
+            id="conflicting-filters",
+        ),
+    ),
+)
+def test_hybrid_search_individual_filters(
+    test_db_config: DbConfig,
+    filters: SearchFilters,
+    expected_article_ids: list[int],
+) -> None:
+    """Verify each hybrid filter against real MariaDB data.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        filters: Search constraints for the current test case.
+        expected_article_ids: Expected article IDs in ranked order.
+    """
+    source = replace(
+        _example_article(),
+        linked_titles=("Test Biology Article",),
+    )
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        length_chars=150,
+        revised_at=datetime(2026, 4, 1),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Biology studies living organisms.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(source, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        assert repo.resolve_links() == 1
+
+        hits = repo.search_chunks(
+            query_vector,
+            top_k=5,
+            filters=filters,
+        )
+
+        assert [hit.article_id for hit in hits] == expected_article_ids
+
+        # Every returned hit must preserve the shared retrieval contract.
+        assert all(hit.score == pytest.approx(1.0 - hit.distance) for hit in hits)
+
+
+def test_exact_search_returns_ranked_hits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact cosine ranking and top-K against MariaDB.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(article, _example_chunks())
+
+        hits = repo.search_chunks_exact(query_vector, top_k=2)
+
+        assert len(hits) == 2
+        assert [hit.chunk_index for hit in hits] == [0, 1]
+        assert hits[0].article_id == article.article_id
+        assert hits[0].article_title == article.title
+        assert hits[0].distance == pytest.approx(0.0, abs=1e-5)
+        assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+        assert hits[1].distance == pytest.approx(1.0, abs=1e-5)
+
+        limited = repo.search_chunks_exact(query_vector, top_k=1)
+
+        assert len(limited) == 1
+        assert limited[0].chunk_index == 0
+
+
+def test_exact_search_supports_hybrid_filters(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact search applies category filtering before top-K.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    biology_chunk = ChunkRecord(
+        chunk_index=0,
+        text="Cells contain genetic material.",
+        embedding=(0.8, 0.6) + (0.0,) * (EMBEDDING_DIM - 2),
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        repo.ingest_article(physics, _example_chunks())
+        repo.ingest_article(biology, (biology_chunk,))
+
+        hits = repo.search_chunks_exact(
+            query_vector,
+            top_k=1,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        assert len(hits) == 1
+        assert hits[0].article_id == biology.article_id
+        assert hits[0].distance == pytest.approx(0.2, abs=1e-5)
+
+
+def test_exact_search_rejects_invalid_inputs(
+    test_db_config: DbConfig,
+) -> None:
+    """Reject malformed exact-search arguments before querying MariaDB.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks_exact((1.0,))
+
+        with pytest.raises(EmbeddingDimensionError):
+            repo.search_chunks_exact((0.0,) * EMBEDDING_DIM)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=0)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=101)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(query_vector, top_k=True)
+
+        with pytest.raises(ValidationError):
+            repo.search_chunks_exact(
+                query_vector,
+                filters=SearchFilters(max_distance=float("nan")),
+            )
+
+
+def test_exact_search_plan_excludes_vector_index(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify exact search does not select the HNSW vector index.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                article,
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    query_vector = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+
+    statement, params = build_hybrid_search_query(
+        SearchFilters(),
+        vector_json=json.dumps(query_vector),
+        top_k=2,
+    )
+
+    # Exact search must explicitly exclude the vector index.
+    assert "IGNORE INDEX (embedding)" in statement
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute("EXPLAIN " + statement, params)
+        plan = cursor.fetchall()
+
+    assert plan
+
+    # No execution-plan step may select the HNSW embedding index.
+    assert all(row["key"] != "embedding" for row in plan)
+
+
+def test_set_ef_search_updates_current_session(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify supported HNSW settings persist on one connection.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    with WikiRepository(test_db_config) as repo:
+        for value in (1, 40, 10_000):
+            repo.set_ef_search(value)
+
+            rows = repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+
+            assert int(rows[0]["value"]) == value
+
+
+def test_set_ef_search_does_not_change_other_sessions(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify HNSW tuning does not change other connections or globals.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    with (
+        WikiRepository(test_db_config) as first,
+        WikiRepository(test_db_config) as second,
+    ):
+        second_before = int(
+            second._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"]
+        )
+
+        global_before = int(
+            first._fetch_all("SELECT @@GLOBAL.mhnsw_ef_search AS value")[0]["value"]
+        )
+
+        # Choose a different value to make session isolation observable.
+        new_value = 43 if second_before != 43 else 47
+
+        first.set_ef_search(new_value)
+
+        first_value = first._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+        second_value = second._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")
+        global_value = first._fetch_all("SELECT @@GLOBAL.mhnsw_ef_search AS value")
+
+        assert int(first_value[0]["value"]) == new_value
+        assert int(second_value[0]["value"]) == second_before
+        assert int(global_value[0]["value"]) == global_before
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    (
+        0,
+        -3,
+        10_001,
+        True,
+        20.0,
+        "20",
+        None,
+        float("nan"),
+    ),
+)
+def test_set_ef_search_rejects_invalid_values(
+    test_db_config: DbConfig,
+    invalid_value: object,
+) -> None:
+    """Reject invalid HNSW settings without changing the session.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        invalid_value: Unsupported parameter value.
+    """
+    with WikiRepository(test_db_config) as repo:
+        before = int(repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"])
+
+        with pytest.raises(ValidationError):
+            repo.set_ef_search(invalid_value)
+
+        after = int(repo._fetch_all("SELECT @@SESSION.mhnsw_ef_search AS value")[0]["value"])
+
+        assert after == before
+
+
+def test_semantic_search_plan_selects_vector_index(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify MariaDB selects the HNSW index for semantic search.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    article = _example_article()
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                article,
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    query_vector = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+    vector_json = json.dumps(query_vector)
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "EXPLAIN " + SEARCH_CHUNKS_SEMANTIC,
+            (vector_json, vector_json, 2),
+        )
+        plan = cursor.fetchall()
+
+    # The inner nearest-neighbor query should select the VECTOR index.
+    assert any(row["table"] == "c" and row["key"] == "embedding" for row in plan), plan
+
+
+def test_semantic_and_exact_search_agree_on_small_dataset(
+    test_db_config: DbConfig,
+) -> None:
+    """Compare approximate and exact retrieval on controlled vectors.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+
+    Returns:
+        None: Passes when both paths agree on nearest neighbors.
+    """
+    article = _example_article()
+
+    vectors = (
+        (1.0, 0.0),
+        (0.8, 0.6),
+        (0.6, 0.8),
+        (0.0, 1.0),
+    )
+
+    chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Comparison chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, chunks) == "inserted"
+
+        repo.set_ef_search(100)
+
+        approximate_hits = repo.search_chunks(
+            query_vector,
+            top_k=3,
+        )
+
+        exact_hits = repo.search_chunks_exact(
+            query_vector,
+            top_k=3,
+        )
+
+        assert len(approximate_hits) == 3
+        assert len(exact_hits) == 3
+
+        assert [hit.chunk_index for hit in approximate_hits] == [
+            0,
+            1,
+            2,
+        ]
+
+        assert [hit.chunk_id for hit in approximate_hits] == [hit.chunk_id for hit in exact_hits]
+
+        for approximate, exact in zip(
+            approximate_hits,
+            exact_hits,
+            strict=True,
+        ):
+            assert approximate.distance == pytest.approx(
+                exact.distance,
+                abs=1e-5,
+            )
+
+            assert approximate.score == pytest.approx(
+                exact.score,
+                abs=1e-5,
+            )
+
+
+def test_hybrid_search_fills_top_k_after_filtering(
+    test_db_config: DbConfig,
+) -> None:
+    """Return three eligible chunks despite closer excluded results.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+
+    Returns:
+        None: Passes when filtering happens before top-K selection.
+    """
+    physics = _example_article()
+
+    biology = replace(
+        _example_article(),
+        article_id=990002,
+        title="Test Biology Article",
+        url="https://en.wikipedia.org/wiki/Test_Biology_Article",
+        fingerprint="b" * 64,
+        topic="biology",
+        categories=("Biology",),
+        linked_titles=(),
+    )
+
+    physics_vectors = (
+        (1.0, 0.0),
+        (0.96, 0.28),
+        (0.8, 0.6),
+    )
+
+    biology_vectors = (
+        (0.6, 0.8),
+        (0.28, 0.96),
+        (0.0, 1.0),
+    )
+
+    physics_chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Physics chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(physics_vectors)
+    )
+
+    biology_chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Biology chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(biology_vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                physics,
+                physics_chunks,
+            )
+            == "inserted"
+        )
+
+        assert (
+            repo.ingest_article(
+                biology,
+                biology_chunks,
+            )
+            == "inserted"
+        )
+
+        repo.set_ef_search(100)
+
+        unfiltered = repo.search_chunks(
+            query_vector,
+            top_k=3,
+        )
+
+        # The globally nearest three chunks belong to Physics.
+        assert len(unfiltered) == 3
+        assert all(hit.article_id == physics.article_id for hit in unfiltered)
+
+        filtered = repo.search_chunks(
+            query_vector,
+            top_k=3,
+            filters=SearchFilters(categories=("Biology",)),
+        )
+
+        # Filtering must happen before the top-K limit.
+        assert len(filtered) == 3
+
+        assert all(hit.article_id == biology.article_id for hit in filtered)
+
+        assert [hit.chunk_index for hit in filtered] == [
+            0,
+            1,
+            2,
+        ]
+
+        assert [hit.distance for hit in filtered] == pytest.approx(
+            [0.4, 0.72, 1.0],
+            abs=1e-5,
+        )
+
+
+def test_metric_mismatch_explain_smoke(
+    test_db_config: DbConfig,
+) -> None:
+    """Compare MariaDB index plans for three distance expressions.
+
+    Insert controlled vectors, inspect optimizer decisions, and
+    collect exploratory timings without asserting performance.
+
+    Args:
+        test_db_config: Isolated MariaDB test database configuration.
+
+    Returns:
+        None: Passes when the expected index behavior is observed.
+    """
+    article = _example_article()
+
+    vectors = (
+        (1.0, 0.0),
+        (0.8, 0.6),
+        (0.0, 1.0),
+        (3.0, 0.0),
+    )
+
+    chunks = tuple(
+        ChunkRecord(
+            chunk_index=index,
+            text=f"Metric mismatch chunk {index}",
+            embedding=vector + (0.0,) * (EMBEDDING_DIM - 2),
+        )
+        for index, vector in enumerate(vectors)
+    )
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+    vector_json = json.dumps(query_vector)
+
+    variants = (
+        (
+            "cosine",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY VEC_DISTANCE_COSINE(
+                c.embedding, VEC_FromText(%s)
+            ) ASC
+            LIMIT %s
+            """,
+        ),
+        (
+            "euclidean",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY VEC_DISTANCE_EUCLIDEAN(
+                c.embedding, VEC_FromText(%s)
+            ) ASC
+            LIMIT %s
+            """,
+        ),
+        (
+            "wrapped_cosine",
+            """
+            SELECT c.chunk_id
+            FROM chunks AS c
+            ORDER BY (
+                1 - VEC_DISTANCE_COSINE(
+                    c.embedding, VEC_FromText(%s)
+                )
+            ) DESC
+            LIMIT %s
+            """,
+        ),
+    )
+
+    with WikiRepository(test_db_config) as repo:
+        assert repo.ingest_article(article, chunks) == "inserted"
+
+    with closing(get_connection(test_db_config)) as conn, conn.cursor() as cursor:
+        for name, statement in variants:
+            params = (vector_json, 3)
+
+            cursor.execute(
+                "EXPLAIN " + statement,
+                params,
+            )
+            plan = cursor.fetchall()
+
+            assert plan
+
+            uses_vector_index = any(
+                row["table"] == "c" and row["key"] == "embedding" for row in plan
+            )
+
+            # The cosine query should use our configured index.
+            if name == "cosine":
+                assert uses_vector_index, plan
+
+            # A Euclidean query cannot use a cosine-only index.
+            if name == "euclidean":
+                assert not uses_vector_index, plan
+
+            print(f"\n{name}:")
+            print(f"  Uses VECTOR index: {uses_vector_index}")
+
+            for row in plan:
+                print(f"  Table: {row['table']}, Access: {row['type']}, Index: {row['key']}")
+
+            # Warm up each query before taking five measurements.
+            cursor.execute(statement, params)
+            cursor.fetchall()
+
+            durations_ms = []
+
+            for _ in range(5):
+                started = perf_counter()
+
+                cursor.execute(statement, params)
+                hits = cursor.fetchall()
+
+                elapsed_ms = (perf_counter() - started) * 1000
+
+                assert len(hits) == 3
+                durations_ms.append(elapsed_ms)
+
+            print(f"  Mean latency: {mean(durations_ms):.4f} ms")
+            print(f"  Standard deviation: {stdev(durations_ms):.4f} ms")
+
+
+def test_explain_search_compares_native_distance_plans(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify diagnostics detect cosine and Euclidean index selection.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    cosine_plan = explain_search(
+        query_vector,
+        top_k=2,
+        distance="cosine",
+        config=test_db_config,
+    )
+
+    euclidean_plan = explain_search(
+        query_vector,
+        top_k=2,
+        distance="euclidean",
+        config=test_db_config,
+    )
+
+    assert any(row["table"] == "c" and row["key"] == "embedding" for row in cosine_plan)
+
+    assert not any(row["table"] == "c" and row["key"] == "embedding" for row in euclidean_plan)
+
+
+def test_explain_search_validates_filters_and_limits(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify diagnostics support filtered plans and reject bad inputs.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    plan = explain_search(
+        query_vector,
+        top_k=2,
+        filters=SearchFilters(categories=("Physics",)),
+        config=test_db_config,
+    )
+
+    assert plan
+
+    # Filtered exact search deliberately avoids the vector index.
+    assert not any(row["table"] == "c" and row["key"] == "embedding" for row in plan)
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            top_k=0,
+            config=test_db_config,
+        )
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            filters=SearchFilters(article_ids=(-1,)),
+            config=test_db_config,
+        )
+
+    with pytest.raises(ValidationError):
+        explain_search(
+            query_vector,
+            distance="manhattan",
+            config=test_db_config,
+        )
+
+
+def test_metric_mismatch_runner_returns_experiment_results(
+    test_db_config: DbConfig,
+    fake_embedder: FakeEmbedder,
+    tmp_path: Path,
+) -> None:
+    """Verify the reusable experiment reports actual MariaDB plans.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        fake_embedder: Deterministic query-embedding implementation.
+        tmp_path: Temporary directory for the JSON experiment report.
+    """
+    with WikiRepository(test_db_config) as repo:
+        assert (
+            repo.ingest_article(
+                _example_article(),
+                _example_chunks(),
+            )
+            == "inserted"
+        )
+
+    report = run_metric_mismatch(
+        fake_embedder,
+        sample_query="How does physics explain motion?",
+        repeats=5,
+        config=test_db_config,
+    )
+
+    assert report["experiment"] == "metric_mismatch"
+    assert report["chunk_count"] == 2
+    assert report["repeats"] == 5
+
+    variants = report["variants"]
+
+    assert set(variants) == {
+        "cosine",
+        "euclidean",
+        "wrapped_cosine",
+    }
+
+    for result in variants.values():
+        assert result["explain"]
+        assert result["rows_returned"] == 2
+        assert len(result["durations_ms"]) == 5
+        assert result["mean_ms"] > 0
+        assert result["p95_ms"] >= result["p50_ms"]
+
+    assert variants["cosine"]["uses_vector_index"]
+    assert not variants["euclidean"]["uses_vector_index"]
+
+    # Save actual MariaDB experiment results as reproducible JSON.
+    destination = tmp_path / "reports" / "metric_mismatch.json"
+
+    saved_path = write_experiment_report(
+        report,
+        output_path=destination,
+    )
+
+    assert saved_path == destination
+    assert destination.is_file()
+
+    saved_report = json.loads(destination.read_text(encoding="utf-8"))
+
+    # Verify that serialization preserves the complete experiment.
+    assert saved_report == report
+
+
+def test_transaction_visibility_across_isolation_levels(
+    test_db_config: DbConfig,
+    tmp_path: Path,
+) -> None:
+    """Record transaction visibility and detect HNSW index-history misses.
+
+    Run both isolation levels sequentially on the same vector index.
+    Verify transactional correctness while preserving evidence of
+    indexed retrieval discrepancies.
+
+    Args:
+        test_db_config: Isolated MariaDB test configuration.
+        tmp_path: Temporary directory for the JSON experiment report.
+
+    Returns:
+        None: Passes if all visibility checks succeed, or reports
+            an expected failure when a committed HNSW hit is missing.
+    """
+    report = run_transaction_visibility(config=test_db_config)
+
+    assert report["experiment"] == "transaction_visibility"
+
+    results = report["isolation_levels"]
+
+    assert set(results) == {
+        "REPEATABLE READ",
+        "READ COMMITTED",
+    }
+
+    invisible = {
+        "articles": 0,
+        "chunks": 0,
+        "q1_hits": 0,
+        "exact_hits": 0,
+    }
+
+    visible_storage = {
+        "articles": 1,
+        "chunks": 1,
+        "exact_hits": 1,
+    }
+
+    indexed_search_misses: list[str] = []
+
+    for isolation, states in results.items():
+        # No uncommitted or rolled-back records should be visible.
+        for stage in (
+            "before",
+            "uncommitted",
+            "after_rollback",
+            "before_commit",
+            "after_cleanup",
+        ):
+            assert states[stage] == invisible
+
+        # Storage and exact search must see the committed vector.
+        for stage in (
+            "after_commit",
+            "after_commit_fresh_reader",
+        ):
+            observation = states[stage]
+
+            for field, expected in visible_storage.items():
+                assert observation[field] == expected
+
+            if observation["q1_hits"] != 1:
+                indexed_search_misses.append(f"{isolation}: {stage}")
+
+    # Preserve the complete observations, including any HNSW misses.
+    report["indexed_search_misses"] = indexed_search_misses
+
+    destination = tmp_path / "transaction_visibility.json"
+
+    write_experiment_report(
+        report,
+        output_path=destination,
+    )
+
+    assert json.loads(destination.read_text(encoding="utf-8")) == report
+
+    print("\nCombined transaction visibility observations:")
+    print(json.dumps(report, indent=2))
+
+    assert not indexed_search_misses, "HNSW missed committed vectors: " + ", ".join(
+        indexed_search_misses
+    )
+
+
+def test_transaction_visibility_rejects_application_database(
+    test_db_config: DbConfig,
+) -> None:
+    """Prevent transaction experiments from modifying application data.
+
+    Args:
+        test_db_config: Dedicated MariaDB test configuration.
+    """
+    unsafe_config = replace(
+        test_db_config,
+        database="wikirag_production",
+    )
+
+    with pytest.raises(ValidationError):
+        demo_transaction_visibility(unsafe_config)
+
+
+@pytest.mark.parametrize(
+    "isolation",
+    ("REPEATABLE READ", "READ COMMITTED"),
+)
+def test_transaction_visibility_with_fresh_index(
+    test_db_config: DbConfig,
+    isolation: str,
+) -> None:
+    """Verify each isolation level independently on a fresh schema.
+
+    The test_db_config fixture recreates the dedicated test schema
+    before each parametrized test case.
+
+    Args:
+        test_db_config: Independently initialized MariaDB test database.
+        isolation: Transaction isolation level being verified.
+
+    Returns:
+        None: Passes when relational and vector visibility agree.
+    """
+    report = demo_transaction_visibility(
+        config=test_db_config,
+        isolation_levels=(isolation,),
+    )
+
+    states = report["isolation_levels"][isolation]
+
+    invisible = {
+        "articles": 0,
+        "chunks": 0,
+        "q1_hits": 0,
+        "exact_hits": 0,
+    }
+
+    visible = {
+        "articles": 1,
+        "chunks": 1,
+        "q1_hits": 1,
+        "exact_hits": 1,
+    }
+
+    print(f"\nFresh-schema results for {isolation}:")
+    print(json.dumps(states, indent=2))
+
+    assert states["before"] == invisible
+    assert states["uncommitted"] == invisible
+    assert states["after_rollback"] == invisible
+    assert states["before_commit"] == invisible
+
+    assert states["after_commit"] == visible
+    assert states["after_commit_fresh_reader"] == visible
+
+    assert states["after_cleanup"] == invisible
+
+
+def test_repeated_article_deletion_preserves_hnsw_search(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify committed vectors remain searchable after deletion cycles.
+
+    Args:
+        test_db_config: Dedicated isolated MariaDB test database.
+
+    Returns:
+        None: Passes when indexed and exact searches find each new
+            article after previous articles have been deleted.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    for index in range(10):
+        article_id = 991000 + index
+
+        article = replace(
+            _example_article(),
+            article_id=article_id,
+            title=f"HNSW Deletion Test {index}",
+            url=f"https://example.invalid/hnsw/{index}",
+            fingerprint=f"{index + 1:064x}",
+            linked_titles=(),
+        )
+
+        with WikiRepository(test_db_config) as writer:
+            assert (
+                writer.ingest_article(
+                    article,
+                    _example_chunks()[:1],
+                )
+                == "inserted"
+            )
+
+        # Use a new connection to verify committed search visibility.
+        with WikiRepository(test_db_config) as reader:
+            indexed_hits = reader.search_chunks(
+                query_vector,
+                top_k=5,
+            )
+
+            exact_hits = reader.search_chunks_exact(
+                query_vector,
+                top_k=5,
+            )
+
+            assert [hit.article_id for hit in indexed_hits] == [article_id]
+
+            assert [hit.article_id for hit in exact_hits] == [article_id]
+
+        with WikiRepository(test_db_config) as writer:
+            assert writer.delete_article(article_id) is True
+            assert writer.count_articles() == 0
+            assert writer.count_chunks() == 0
+
+
+def test_repeated_article_updates_preserve_hnsw_search(
+    test_db_config: DbConfig,
+) -> None:
+    """Verify updated embeddings remain searchable across replacement cycles.
+
+    Args:
+        test_db_config: Isolated MariaDB test database configuration.
+
+    Returns:
+        None: Passes when each committed replacement is visible
+            through indexed and exact cosine retrieval.
+    """
+    article = replace(
+        _example_article(),
+        linked_titles=(),
+    )
+
+    for cycle in range(10):
+        # Alternate query directions to verify the current stored vector.
+        first_dimension = 1.0 if cycle % 2 == 0 else 0.0
+        second_dimension = 1.0 - first_dimension
+
+        vector = (
+            first_dimension,
+            second_dimension,
+        ) + (0.0,) * (EMBEDDING_DIM - 2)
+
+        updated_article = replace(
+            article,
+            revision_id=10 + cycle,
+            fingerprint=f"{cycle + 1:064x}",
+        )
+
+        updated_chunk = ChunkRecord(
+            chunk_index=0,
+            text=f"Updated physics chunk version {cycle}",
+            embedding=vector,
+        )
+
+        with WikiRepository(test_db_config) as writer:
+            outcome = writer.ingest_article(
+                updated_article,
+                (updated_chunk,),
+            )
+
+            assert outcome == ("inserted" if cycle == 0 else "updated")
+
+        # Read committed data through an independent connection.
+        with WikiRepository(test_db_config) as reader:
+            assert reader.count_articles() == 1
+            assert reader.count_chunks() == 1
+
+            indexed_hits = reader.search_chunks(
+                vector,
+                top_k=1,
+            )
+
+            exact_hits = reader.search_chunks_exact(
+                vector,
+                top_k=1,
+            )
+
+            assert len(indexed_hits) == 1
+            assert len(exact_hits) == 1
+
+            for hit in (*indexed_hits, *exact_hits):
+                assert hit.article_id == article.article_id
+                assert hit.text == updated_chunk.text
+                assert hit.distance == pytest.approx(
+                    0.0,
+                    abs=1e-5,
+                )

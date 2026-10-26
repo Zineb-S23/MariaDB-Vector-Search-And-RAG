@@ -352,3 +352,33 @@ These features are not yet implemented in the current foundation.
 - [MariaDB Project Assignment](https://mariadb.org/bachelor_hackathon_2026-09/)
 - [MariaDB Documentation](https://mariadb.com/docs/)
 - [uv Documentation](https://docs.astral.sh/uv/)
+
+### Database depth experiments
+
+The MariaDB database layer has been evaluated using controlled
+synthetic vector experiments on MariaDB 11.8.9.
+
+- **Metric mismatch:** Direct cosine ranking used the native
+  HNSW index; modified distance expressions did not select it
+  in the controlled verification.
+- **Transaction visibility:** Relational records and indexed
+  vectors were visible together after commit, but not before.
+  A deletion-related HNSW regression was reproduced and mitigated.
+- **HNSW cache size:** Three cache limits were compared using
+  five restart cycles and 125 warm measurements per setting.
+
+| Cache limit | Mean latency | p95 latency |
+| --- | ---: | ---: |
+| 1 MiB | 6.018 ms | 8.516 ms |
+| 16 MiB | 2.878 ms | 5.023 ms |
+| 64 MiB | 3.016 ms | 4.683 ms |
+
+The measurements use 6,000 synthetic VECTOR(384) embeddings.
+They do not establish retrieval quality or optimal settings
+for the final Wikipedia corpus.
+
+Full methodology and reproduction instructions:
+[Database Depth Experiments](docs/database_experiments.md).
+
+Machine-readable results:
+[HNSW Cache Benchmark](results/experiments/cache_size_synthetic.json).

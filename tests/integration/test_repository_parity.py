@@ -13,7 +13,7 @@ from wikirag.db.connection import get_connection
 from wikirag.db.repository import WikiRepository
 from wikirag.db.schema import init_schema
 from wikirag.errors import EmbeddingDimensionError, ValidationError
-from wikirag.models import ArticleRecord, ChunkRecord
+from wikirag.models import ArticleRecord, ChunkRecord, SearchFilters
 
 
 @pytest.fixture(params=("fake", "mariadb"))
@@ -199,3 +199,189 @@ def test_invalid_embedding_preserves_state(
     assert repository.get_fingerprint(article.article_id) == "a" * 64
     assert repository.count_articles() == 1
     assert repository.count_chunks() == 1
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected_article_ids"),
+    (
+        pytest.param(
+            SearchFilters(topics=("BIOLOGY",)),
+            (920002,),
+            id="topic",
+        ),
+        pytest.param(
+            SearchFilters(categories=("life",)),
+            (920002,),
+            id="category",
+        ),
+        pytest.param(
+            SearchFilters(article_ids=(920002,)),
+            (920002,),
+            id="included-article",
+        ),
+        pytest.param(
+            SearchFilters(exclude_article_ids=(920001,)),
+            (920002,),
+            id="excluded-article",
+        ),
+        pytest.param(
+            SearchFilters(min_length_chars=100),
+            (920002,),
+            id="article-length",
+        ),
+        pytest.param(
+            SearchFilters(edited_since=datetime(2026, 2, 1)),
+            (920002,),
+            id="revision-date",
+        ),
+        pytest.param(
+            SearchFilters(linked_from_article_id=920001),
+            (920002,),
+            id="article-links",
+        ),
+        pytest.param(
+            SearchFilters(max_distance=0.0),
+            (920001, 920002),
+            id="distance-boundary",
+        ),
+        pytest.param(
+            SearchFilters(
+                topics=("missing", "biology"),
+                categories=("missing", "Life"),
+            ),
+            (920002,),
+            id="or-within-fields",
+        ),
+        pytest.param(
+            SearchFilters(
+                topics=("BIOLOGY",),
+                categories=("life",),
+                min_length_chars=100,
+                linked_from_article_id=920001,
+            ),
+            (920002,),
+            id="combined-filters",
+        ),
+        pytest.param(
+            SearchFilters(
+                topics=("biology",),
+                categories=("Science",),
+            ),
+            (),
+            id="conflicting-filters",
+        ),
+    ),
+)
+def test_filtered_search_parity(
+    repository: InMemoryRepository | WikiRepository,
+    filters: SearchFilters,
+    expected_article_ids: tuple[int, ...],
+) -> None:
+    """Verify identical filtered search results across repositories.
+
+    Args:
+        repository: Isolated fake or real MariaDB repository.
+        filters: Relational and distance constraints to test.
+        expected_article_ids: Expected ranked article identifiers.
+    """
+    source = _article(
+        920001,
+        "Source",
+        linked_titles=("Biology",),
+    )
+
+    biology = replace(
+        _article(
+            920002,
+            "Biology",
+            fingerprint="b" * 64,
+        ),
+        topic="biology",
+        categories=("Life",),
+        length_chars=150,
+        revised_at=datetime(2026, 4, 1),
+    )
+
+    # Identical embeddings make the deterministic tie-breakers testable.
+    for article in (source, biology):
+        assert (
+            repository.ingest_article(
+                article,
+                (_chunk(),),
+            )
+            == "inserted"
+        )
+
+    assert repository.resolve_links() == 1
+
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    hits = repository.search_chunks(
+        query_vector,
+        top_k=5,
+        filters=filters,
+    )
+
+    assert tuple(hit.article_id for hit in hits) == expected_article_ids
+
+    for hit in hits:
+        assert hit.score == pytest.approx(1.0 - hit.distance)
+        assert 0.0 <= hit.distance <= 2.0
+
+
+@pytest.mark.parametrize(
+    "invalid_filters",
+    (
+        SearchFilters(topics=(None,)),
+        SearchFilters(article_ids=(True,)),
+        SearchFilters(min_length_chars=-1),
+        SearchFilters(max_distance="0.2"),
+    ),
+)
+def test_invalid_search_filter_parity(
+    repository: InMemoryRepository | WikiRepository,
+    invalid_filters: SearchFilters,
+) -> None:
+    """Reject invalid filters consistently in both repositories.
+
+    Args:
+        repository: Fake or MariaDB repository.
+        invalid_filters: Search constraints containing an invalid value.
+    """
+    query_vector = (1.0,) + (0.0,) * (EMBEDDING_DIM - 1)
+
+    with pytest.raises(ValidationError):
+        repository.search_chunks(
+            query_vector,
+            filters=invalid_filters,
+        )
+
+    with pytest.raises(ValidationError):
+        repository.search_chunks_exact(
+            query_vector,
+            filters=invalid_filters,
+        )
+
+
+def test_ef_search_validation_parity(
+    repository: InMemoryRepository | WikiRepository,
+) -> None:
+    """Verify both repositories accept the same HNSW settings.
+
+    Args:
+        repository: Isolated fake or MariaDB repository.
+    """
+    for value in (1, 40, 10_000):
+        assert repository.set_ef_search(value) is None
+
+    for invalid_value in (
+        0,
+        -1,
+        10_001,
+        True,
+        20.0,
+        "20",
+        None,
+    ):
+        with pytest.raises(ValidationError):
+            repository.set_ef_search(invalid_value)

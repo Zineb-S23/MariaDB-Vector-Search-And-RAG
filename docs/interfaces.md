@@ -105,6 +105,7 @@ class SearchFilters:
     max_distance: float | None = None
 
     def is_empty(self) -> bool: ...
+    def validate(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +133,17 @@ class SearchHit:
 | `max_distance` | Keep only results within the cosine-distance threshold. |
 
 `SearchHit` is the public return type. Do **not** expose raw SQL tuples or dictionaries as search results.
+
+`SearchFilters.validate()` raises `ValidationError` for invalid
+filter values. Topic and category filters require tuples of
+non-empty strings. Article IDs must be positive integers.
+`min_length_chars` must be a non-negative integer.
+`edited_since` must be a naive UTC datetime.
+`max_distance` must be a finite number between 0 and 2.
+
+Both `WikiRepository` and `InMemoryRepository` call this method
+before executing a filtered search. This preserves consistent
+validation across the real and fake implementations.
 
 ### 4.3 Pipeline, RAG, and evaluation records
 
@@ -280,6 +292,8 @@ class WikiRepository:
 6. On database failure, **roll back** and raise `DatabaseError`; do not leave partially replaced data.
 
 `resolve_links()` runs once after ingestion, resolves links only to in-corpus articles, and returns the number resolved. `delete_article()` returns `False` if the article does not exist; otherwise it removes dependent records.
+
+Article title lookup and link resolution use exact, case-sensitive title matching, consistent with the database's binary title collation. The ingestion pipeline must normalize Wikipedia titles consistently before storing articles and outgoing links.
 
 ### 5.3 Search semantics
 

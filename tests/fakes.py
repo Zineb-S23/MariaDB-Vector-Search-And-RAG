@@ -495,9 +495,8 @@ class InMemoryRepository:
 
         self._check_open()
 
-        title_to_id = {
-            article.title.casefold(): article.article_id for article in self._articles.values()
-        }
+        # Match Wikipedia titles exactly, as in the MariaDB repository.
+        title_to_id = {article.title: article.article_id for article in self._articles.values()}
 
         resolved: dict[int, set[int]] = {}
 
@@ -505,7 +504,7 @@ class InMemoryRepository:
             targets: set[int] = set()
 
             for linked_title in article.linked_titles:
-                target_id = title_to_id.get(linked_title.casefold())
+                target_id = title_to_id.get(linked_title)
 
                 if target_id is not None:
                     targets.add(target_id)
@@ -659,16 +658,11 @@ class InMemoryRepository:
         if type(top_k) is not int or not 1 <= top_k <= 100:
             raise ValidationError("top_k must be between 1 and 100")
 
-        if filters is not None and not isinstance(filters, SearchFilters):
-            raise ValidationError("filters must be SearchFilters or None")
+        if filters is not None:
+            if not isinstance(filters, SearchFilters):
+                raise ValidationError("filters must be SearchFilters or None")
 
-        # Reject invalid distance thresholds before searching.
-        if (
-            filters is not None
-            and filters.max_distance is not None
-            and (not math.isfinite(filters.max_distance) or not 0.0 <= filters.max_distance <= 2.0)
-        ):
-            raise ValidationError("max_distance must be between 0 and 2")
+            filters.validate()
 
         query_vector = self._validate_vector(query_embedding)
         ranked: list[SearchHit] = []
@@ -832,7 +826,7 @@ class InMemoryRepository:
         self._check_open()
 
         for article in self._articles.values():
-            if article.title.casefold() == title.casefold():
+            if article.title == title:
                 return article
 
         return None
@@ -923,25 +917,24 @@ class InMemoryRepository:
         return len(self._chunks)
 
     def set_ef_search(self, value: int) -> None:
-        """
-        Accept the HNSW search parameter for interface compatibility.
+        """Store a validated HNSW search setting for interface parity.
 
-        The fake uses exact search, so this setting does not change
-        its search algorithm.
+        The fake repository always uses exact cosine search, so this
+        setting does not change its retrieval algorithm.
 
         Args:
-            value (int): Positive HNSW ef_search setting.
+            value: HNSW search breadth, an integer from 1 to 10000.
 
         Returns:
-            None: Stores the setting without modifying search behavior.
+            None: Stores the validated setting.
 
         Raises:
-            ValidationError: If value is not a positive integer.
+            DatabaseConnectionError: If the repository is closed.
+            ValidationError: If value is not an integer from 1 to 10000.
         """
-
         self._check_open()
 
-        if type(value) is not int or value < 1:
-            raise ValidationError("ef_search must be positive")
+        if type(value) is not int or not 1 <= value <= 10_000:
+            raise ValidationError("ef_search must be an integer between 1 and 10000")
 
         self._ef_search = value

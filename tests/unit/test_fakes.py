@@ -526,3 +526,75 @@ def test_invalid_ingestion_does_not_modify_repository(
 
     assert fake_repo.count_articles() == 0
     assert fake_repo.count_chunks() == 0
+
+
+def test_fake_matches_titles_and_links_exactly(
+    fake_repo: InMemoryRepository,
+) -> None:
+    """Keep case-sensitive title matching consistent with MariaDB.
+
+    Args:
+        fake_repo: Empty in-memory repository.
+    """
+    first = _article(
+        1,
+        "Apple",
+        topic="testing",
+        categories=(),
+        length_chars=100,
+        revised_at=datetime(2026, 1, 1),
+    )
+    second = _article(
+        2,
+        "APPLE",
+        topic="testing",
+        categories=(),
+        length_chars=100,
+        revised_at=datetime(2026, 1, 1),
+    )
+    source = _article(
+        3,
+        "Source",
+        topic="testing",
+        categories=(),
+        length_chars=100,
+        revised_at=datetime(2026, 1, 1),
+        linked_titles=("Apple", "APPLE"),
+    )
+
+    for article in (first, second, source):
+        chunk = ChunkRecord(
+            chunk_index=0,
+            text="Example content",
+            embedding=_vector(0),
+        )
+        assert fake_repo.ingest_article(article, [chunk]) == "inserted"
+
+    assert fake_repo.get_article_by_title("Apple") == first
+    assert fake_repo.get_article_by_title("APPLE") == second
+    assert fake_repo.get_article_by_title("apple") is None
+
+    assert fake_repo.resolve_links() == 2
+    assert {article.article_id for article in fake_repo.get_linked_articles(source.article_id)} == {
+        1,
+        2,
+    }
+
+
+def test_fake_ef_search_validates_upper_bound(
+    fake_repo: InMemoryRepository,
+) -> None:
+    """Reject out-of-range settings without changing stored state.
+
+    Args:
+        fake_repo: Isolated in-memory repository.
+    """
+    fake_repo.set_ef_search(10_000)
+
+    assert fake_repo._ef_search == 10_000
+
+    with pytest.raises(ValidationError):
+        fake_repo.set_ef_search(10_001)
+
+    # An invalid update must preserve the previously accepted value.
+    assert fake_repo._ef_search == 10_000

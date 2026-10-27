@@ -8,10 +8,11 @@ They do not require a running MariaDB server or an embedding model.
 """
 
 from dataclasses import FrozenInstanceError, fields
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
+from wikirag.errors import ValidationError
 from wikirag.models import (
     ArticleRecord,
     ChunkRecord,
@@ -309,3 +310,52 @@ def test_evaluation_query_preserves_relevant_articles() -> None:
     assert query.relevant_article_ids == frozenset({123, 456})
     assert query.filters is None
     assert query.notes == ""
+
+
+@pytest.mark.parametrize(
+    "filters",
+    (
+        SearchFilters(topics="physics"),
+        SearchFilters(topics=("physics", "")),
+        SearchFilters(categories=(123,)),
+        SearchFilters(categories=["Science"]),
+        SearchFilters(article_ids=(True,)),
+        SearchFilters(article_ids=(-1,)),
+        SearchFilters(exclude_article_ids=("7",)),
+        SearchFilters(min_length_chars=-1),
+        SearchFilters(min_length_chars=True),
+        SearchFilters(edited_since="2026-01-01"),
+        SearchFilters(edited_since=datetime(2026, 1, 1, tzinfo=UTC)),
+        SearchFilters(linked_from_article_id=0),
+        SearchFilters(max_distance=float("nan")),
+        SearchFilters(max_distance="0.3"),
+    ),
+)
+def test_search_filters_reject_invalid_values(
+    filters: SearchFilters,
+) -> None:
+    """Reject malformed values from every shared filter category.
+
+    Args:
+        filters: Search constraints containing an invalid value.
+    """
+    with pytest.raises(ValidationError):
+        filters.validate()
+
+
+def test_search_filters_accept_valid_boundaries() -> None:
+    """Accept valid empty and boundary-valued search constraints."""
+    SearchFilters().validate()
+
+    filters = SearchFilters(
+        topics=("Physics",),
+        categories=("Science",),
+        article_ids=(1,),
+        exclude_article_ids=(2,),
+        min_length_chars=0,
+        edited_since=datetime(2026, 1, 1),
+        linked_from_article_id=3,
+        max_distance=0.0,
+    )
+
+    filters.validate()

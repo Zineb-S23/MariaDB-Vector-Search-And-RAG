@@ -12,9 +12,12 @@ The public field names and types must remain consistent across modules.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
+
+from wikirag.errors import ValidationError
 
 # Shared operation and retrieval mode names.
 IngestOutcome = Literal["inserted", "updated", "skipped"]
@@ -143,6 +146,56 @@ class SearchFilters:
             and self.linked_from_article_id is None
             and self.max_distance is None
         )
+
+    def validate(self) -> None:
+        """Validate relational search constraints before retrieval.
+
+        Returns:
+            None: All filter values satisfy the shared contract.
+
+        Raises:
+            ValidationError: If a filter contains an invalid type,
+                empty label, invalid identifier, or invalid threshold.
+        """
+        for field_name, values in (
+            ("topics", self.topics),
+            ("categories", self.categories),
+        ):
+            if type(values) is not tuple or any(
+                type(value) is not str or not value.strip() for value in values
+            ):
+                raise ValidationError(f"{field_name} must be a tuple of non-empty strings")
+
+        for field_name, values in (
+            ("article_ids", self.article_ids),
+            ("exclude_article_ids", self.exclude_article_ids),
+        ):
+            if type(values) is not tuple or any(
+                type(value) is not int or value <= 0 for value in values
+            ):
+                raise ValidationError(f"{field_name} must contain positive integer IDs")
+
+        if self.min_length_chars is not None and (
+            type(self.min_length_chars) is not int or self.min_length_chars < 0
+        ):
+            raise ValidationError("min_length_chars must be a non-negative integer")
+
+        if self.edited_since is not None and (
+            not isinstance(self.edited_since, datetime) or self.edited_since.tzinfo is not None
+        ):
+            raise ValidationError("edited_since must be a naive UTC datetime")
+
+        if self.linked_from_article_id is not None and (
+            type(self.linked_from_article_id) is not int or self.linked_from_article_id <= 0
+        ):
+            raise ValidationError("linked_from_article_id must be a positive integer")
+
+        if self.max_distance is not None and (
+            type(self.max_distance) not in (int, float)
+            or not 0.0 <= self.max_distance <= 2.0
+            or not math.isfinite(self.max_distance)
+        ):
+            raise ValidationError("max_distance must be a finite number between 0 and 2")
 
 
 @dataclass(frozen=True, slots=True)
